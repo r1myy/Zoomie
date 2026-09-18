@@ -143,6 +143,7 @@ export function HostPanel({
                   type="button"
                   onClick={() => onMute(tile.identity)}
                   title="Couper le micro pour tout le monde"
+                  aria-label={`Couper le micro de ${tile.name.split("#")[0]} pour tout le monde`}
                   className="rounded-sm border border-line px-2 py-1 text-xs text-dust hover:border-amber/40 hover:text-paper"
                 >
                   🔇
@@ -151,6 +152,7 @@ export function HostPanel({
                   type="button"
                   onClick={() => onRemove(tile.identity)}
                   title="Exclure de la réunion"
+                  aria-label={`Exclure ${tile.name.split("#")[0]} de la réunion`}
                   className="rounded-sm border border-danger/30 px-2 py-1 text-xs text-danger hover:bg-danger/10"
                 >
                   ⏻

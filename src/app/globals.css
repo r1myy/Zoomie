@@ -6,7 +6,9 @@
   --console-panel-raised: #2b2436;
   --paper: #f3eee6;
   --dust: #9b93a1;
-  --dust-dim: #6b6473;
+  /* Assombri à l'origine (#6b6473), remonté pour rester ≥4.5:1 (WCAG AA) sur
+     console/panel/panel-raised — mesuré, pas juste ajusté à l'œil. */
+  --dust-dim: #968ca1;
   --amber: #e3a548;
   --amber-dim: #b9843a;
   --teal: #4fc7b5;
