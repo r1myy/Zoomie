@@ -37,20 +37,24 @@ export function Toolbar({
   camOn,
   sharing,
   chatOpen,
+  participantsOpen,
   onToggleMic,
   onToggleCam,
   onToggleShare,
   onToggleChat,
+  onToggleParticipants,
   onLeave,
 }: {
   micOn: boolean;
   camOn: boolean;
   sharing: boolean;
   chatOpen: boolean;
+  participantsOpen: boolean;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onToggleShare: () => void;
   onToggleChat: () => void;
+  onToggleParticipants: () => void;
   onLeave: () => void;
 }) {
   return (
@@ -66,6 +70,9 @@ export function Toolbar({
       </ToolbarButton>
       <ToolbarButton label="Discussion" active={chatOpen} onClick={onToggleChat}>
         💬
+      </ToolbarButton>
+      <ToolbarButton label="Participants" active={participantsOpen} onClick={onToggleParticipants}>
+        👥
       </ToolbarButton>
       <ToolbarButton label="Quitter la réunion" danger onClick={onLeave}>
         ⏻

@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       identity,
       wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
       isHost: room.hostIdentity === identity,
+      locked: room.locked,
     });
   } catch (err) {
     return NextResponse.json(

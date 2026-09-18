@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ConnectionState,
+  DisconnectReason,
   LocalParticipant,
   LocalVideoTrack,
   Participant,
@@ -35,6 +36,7 @@ export interface ChatMessage {
 }
 
 const CHAT_TOPIC = "chat";
+const ROOM_STATE_TOPIC = "room-state";
 
 function tileFromParticipant(p: Participant, isLocal: boolean): TileState {
   const stored = isLocal ? { percent: 100, muted: false } : getStoredVolume(p.name || p.identity);
@@ -55,10 +57,16 @@ export function useMeetingRoom({
   wsUrl,
   token,
   identity,
+  roomCode,
+  isHost,
+  initialLocked,
 }: {
   wsUrl?: string;
   token?: string;
   identity?: string;
+  roomCode?: string;
+  isHost?: boolean;
+  initialLocked?: boolean;
 }) {
   const roomRef = useRef<Room | null>(null);
   const mixerRef = useRef<MixerEngine | null>(null);
@@ -70,6 +78,8 @@ export function useMeetingRoom({
   const [error, setError] = useState<string | null>(null);
   const [masterPercent, setMasterPercentState] = useState(100);
   const [screenShareBy, setScreenShareBy] = useState<string | null>(null);
+  const [roomLocked, setRoomLocked] = useState(Boolean(initialLocked));
+  const [hostActionError, setHostActionError] = useState<string | null>(null);
 
   const patchTile = useCallback((id: string, patch: Partial<TileState>) => {
     setTiles((prev) => {
@@ -161,7 +171,23 @@ export function useMeetingRoom({
       });
     });
 
-    room.on(RoomEvent.Disconnected, () => setConnectionState(ConnectionState.Disconnected));
+    room.registerTextStreamHandler(ROOM_STATE_TOPIC, (reader) => {
+      reader.readAll().then((text) => {
+        try {
+          const parsed = JSON.parse(text) as { locked: boolean };
+          setRoomLocked(parsed.locked);
+        } catch {
+          // ignore malformed payloads
+        }
+      });
+    });
+
+    room.on(RoomEvent.Disconnected, (reason) => {
+      setConnectionState(ConnectionState.Disconnected);
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED) {
+        setError("Vous avez été exclu de la réunion par l'hôte.");
+      }
+    });
 
     (async () => {
       try {
@@ -295,6 +321,50 @@ export function useMeetingRoom({
     roomRef.current?.disconnect();
   }, []);
 
+  const callHostAction = useCallback(
+    async (action: "mute" | "remove" | "lock" | "unlock", targetIdentity?: string) => {
+      if (!roomCode || !identity) return false;
+      setHostActionError(null);
+      try {
+        const res = await fetch(`/api/rooms/${roomCode}/host-actions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ callerIdentity: identity, action, targetIdentity }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Action refusée.");
+        return true;
+      } catch (err) {
+        setHostActionError(err instanceof Error ? err.message : "Erreur inconnue.");
+        return false;
+      }
+    },
+    [roomCode, identity]
+  );
+
+  const hostMuteParticipant = useCallback(
+    (targetIdentity: string) => callHostAction("mute", targetIdentity),
+    [callHostAction]
+  );
+
+  const hostRemoveParticipant = useCallback(
+    (targetIdentity: string) => callHostAction("remove", targetIdentity),
+    [callHostAction]
+  );
+
+  const toggleRoomLock = useCallback(async () => {
+    const next = !roomLocked;
+    const ok = await callHostAction(next ? "lock" : "unlock");
+    if (!ok) return;
+    setRoomLocked(next);
+    const room = roomRef.current;
+    if (room) {
+      void room.localParticipant.sendText(JSON.stringify({ locked: next }), {
+        topic: ROOM_STATE_TOPIC,
+      });
+    }
+  }, [roomLocked, callHostAction]);
+
   return {
     connectionState,
     tiles: Object.values(tiles),
@@ -303,6 +373,9 @@ export function useMeetingRoom({
     error,
     masterPercent,
     screenShareBy,
+    isHost: Boolean(isHost),
+    roomLocked,
+    hostActionError,
     setParticipantVolume,
     toggleParticipantMute,
     setMasterPercent,
@@ -311,6 +384,9 @@ export function useMeetingRoom({
     toggleCam,
     toggleScreenShare,
     sendChat,
+    hostMuteParticipant,
+    hostRemoveParticipant,
+    toggleRoomLock,
     leave,
   };
 }

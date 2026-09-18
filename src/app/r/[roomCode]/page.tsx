@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMeetingRoom } from "@/lib/livekit/useMeetingRoom";
 import { ParticipantTile } from "@/components/meeting/ParticipantTile";
 import { Toolbar } from "@/components/meeting/Toolbar";
 import { ChatPanel } from "@/components/meeting/ChatPanel";
+import { HostPanel } from "@/components/meeting/HostPanel";
 
 interface TokenResponse {
   token: string;
   identity: string;
   wsUrl: string;
   isHost: boolean;
+  locked: boolean;
 }
 
 export default function MeetingRoomPage() {
@@ -24,14 +26,22 @@ export default function MeetingRoomPage() {
 
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [sidePanel, setSidePanel] = useState<"chat" | "participants" | null>(null);
+  const requestedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!name) {
       router.replace(`/?join=${roomCode}`);
       return;
     }
-    let cancelled = false;
+    // Next.js dev (Strict Mode) invokes effects twice; each call to /api/token
+    // mints a brand-new random identity server-side, so a duplicate call would
+    // silently create a second, unused "host" identity for the same room. This
+    // guard makes sure exactly one token request ever leaves for this page.
+    const key = `${roomCode}:${name}:${wantsHost}`;
+    if (requestedKeyRef.current === key) return;
+    requestedKeyRef.current = key;
+
     fetch("/api/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,14 +50,11 @@ export default function MeetingRoomPage() {
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Impossible de rejoindre la réunion.");
-        if (!cancelled) setSession(data);
+        setSession(data);
       })
       .catch((err) => {
-        if (!cancelled) setJoinError(err instanceof Error ? err.message : "Erreur inconnue.");
+        setJoinError(err instanceof Error ? err.message : "Erreur inconnue.");
       });
-    return () => {
-      cancelled = true;
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, name, wantsHost]);
 
@@ -55,6 +62,9 @@ export default function MeetingRoomPage() {
     wsUrl: session?.wsUrl,
     token: session?.token,
     identity: session?.identity,
+    roomCode,
+    isHost: session?.isHost,
+    initialLocked: session?.locked,
   });
 
   if (joinError) {
@@ -91,6 +101,11 @@ export default function MeetingRoomPage() {
           <span className="h-2 w-2 rounded-full bg-teal" />
           <span className="font-display text-lg font-bold text-paper">ZOOMIE</span>
           <span className="font-mono text-xs text-dust-dim">· {roomCode}</span>
+          {meeting.roomLocked && (
+            <span className="rounded-sm bg-danger/15 px-2 py-0.5 font-mono text-[10px] uppercase text-danger">
+              🔒 verrouillée
+            </span>
+          )}
         </div>
         {meeting.error && <p className="text-xs text-danger">{meeting.error}</p>}
       </header>
@@ -127,18 +142,37 @@ export default function MeetingRoomPage() {
             ))}
           </div>
         </div>
-        {chatOpen && <div className="w-72 shrink-0"><ChatPanel messages={meeting.messages} onSend={meeting.sendChat} /></div>}
+        {sidePanel === "chat" && (
+          <div className="w-72 shrink-0">
+            <ChatPanel messages={meeting.messages} onSend={meeting.sendChat} />
+          </div>
+        )}
+        {sidePanel === "participants" && (
+          <div className="w-72 shrink-0">
+            <HostPanel
+              tiles={meeting.tiles}
+              isHost={meeting.isHost}
+              roomLocked={meeting.roomLocked}
+              hostActionError={meeting.hostActionError}
+              onToggleLock={meeting.toggleRoomLock}
+              onMute={meeting.hostMuteParticipant}
+              onRemove={meeting.hostRemoveParticipant}
+            />
+          </div>
+        )}
       </div>
 
       <Toolbar
         micOn={localTile?.micEnabled ?? false}
         camOn={localTile?.camEnabled ?? false}
         sharing={meeting.screenShareBy === session.identity}
-        chatOpen={chatOpen}
+        chatOpen={sidePanel === "chat"}
+        participantsOpen={sidePanel === "participants"}
         onToggleMic={meeting.toggleMic}
         onToggleCam={meeting.toggleCam}
         onToggleShare={meeting.toggleScreenShare}
-        onToggleChat={() => setChatOpen((v) => !v)}
+        onToggleChat={() => setSidePanel((v) => (v === "chat" ? null : "chat"))}
+        onToggleParticipants={() => setSidePanel((v) => (v === "participants" ? null : "participants"))}
         onLeave={() => {
           meeting.leave();
           router.push("/");
