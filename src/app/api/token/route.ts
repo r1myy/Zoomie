@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
       isHost: room.hostIdentity === identity,
       locked: room.locked,
+      waitingRoomEnabled: room.waitingRoomEnabled,
     });
   } catch (err) {
     return NextResponse.json(

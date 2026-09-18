@@ -53,6 +53,12 @@ function tileFromParticipant(p: Participant, isLocal: boolean): TileState {
   };
 }
 
+export interface WaitingParticipant {
+  id: string;
+  displayName: string;
+  createdAt: number;
+}
+
 export function useMeetingRoom({
   wsUrl,
   token,
@@ -60,6 +66,7 @@ export function useMeetingRoom({
   roomCode,
   isHost,
   initialLocked,
+  initialWaitingRoomEnabled,
 }: {
   wsUrl?: string;
   token?: string;
@@ -67,6 +74,7 @@ export function useMeetingRoom({
   roomCode?: string;
   isHost?: boolean;
   initialLocked?: boolean;
+  initialWaitingRoomEnabled?: boolean;
 }) {
   const roomRef = useRef<Room | null>(null);
   const mixerRef = useRef<MixerEngine | null>(null);
@@ -80,6 +88,8 @@ export function useMeetingRoom({
   const [screenShareBy, setScreenShareBy] = useState<string | null>(null);
   const [roomLocked, setRoomLocked] = useState(Boolean(initialLocked));
   const [hostActionError, setHostActionError] = useState<string | null>(null);
+  const [waitingRoomEnabled, setWaitingRoomEnabled] = useState(Boolean(initialWaitingRoomEnabled));
+  const [pendingRequests, setPendingRequests] = useState<WaitingParticipant[]>([]);
 
   const patchTile = useCallback((id: string, patch: Partial<TileState>) => {
     setTiles((prev) => {
@@ -232,6 +242,33 @@ export function useMeetingRoom({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsUrl, token]);
 
+  // L'hôte sonde la salle d'attente — pas de temps réel sans Supabase pour
+  // l'instant, un court intervalle suffit pour une liste qui reste courte.
+  useEffect(() => {
+    if (!isHost || !roomCode || !identity) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(
+          `/api/rooms/${roomCode}/waiting-list?callerIdentity=${encodeURIComponent(identity)}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setPendingRequests(data.pending ?? []);
+      } catch {
+        // ignore transient polling errors
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isHost, roomCode, identity]);
+
   const setParticipantVolume = useCallback(
     (targetIdentity: string, percent: number) => {
       mixerRef.current?.setParticipantPercent(targetIdentity, percent);
@@ -322,14 +359,25 @@ export function useMeetingRoom({
   }, []);
 
   const callHostAction = useCallback(
-    async (action: "mute" | "remove" | "lock" | "unlock", targetIdentity?: string) => {
+    async (
+      action:
+        | "mute"
+        | "remove"
+        | "lock"
+        | "unlock"
+        | "admit"
+        | "deny"
+        | "enable-waiting-room"
+        | "disable-waiting-room",
+      opts?: { targetIdentity?: string; targetRequestId?: string }
+    ) => {
       if (!roomCode || !identity) return false;
       setHostActionError(null);
       try {
         const res = await fetch(`/api/rooms/${roomCode}/host-actions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ callerIdentity: identity, action, targetIdentity }),
+          body: JSON.stringify({ callerIdentity: identity, action, ...opts }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Action refusée.");
@@ -343,12 +391,12 @@ export function useMeetingRoom({
   );
 
   const hostMuteParticipant = useCallback(
-    (targetIdentity: string) => callHostAction("mute", targetIdentity),
+    (targetIdentity: string) => callHostAction("mute", { targetIdentity }),
     [callHostAction]
   );
 
   const hostRemoveParticipant = useCallback(
-    (targetIdentity: string) => callHostAction("remove", targetIdentity),
+    (targetIdentity: string) => callHostAction("remove", { targetIdentity }),
     [callHostAction]
   );
 
@@ -365,6 +413,31 @@ export function useMeetingRoom({
     }
   }, [roomLocked, callHostAction]);
 
+  const toggleWaitingRoom = useCallback(async () => {
+    const next = !waitingRoomEnabled;
+    const ok = await callHostAction(next ? "enable-waiting-room" : "disable-waiting-room");
+    if (!ok) return;
+    setWaitingRoomEnabled(next);
+  }, [waitingRoomEnabled, callHostAction]);
+
+  const admitRequest = useCallback(
+    async (requestId: string) => {
+      const ok = await callHostAction("admit", { targetRequestId: requestId });
+      if (ok) setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      return ok;
+    },
+    [callHostAction]
+  );
+
+  const denyRequest = useCallback(
+    async (requestId: string) => {
+      const ok = await callHostAction("deny", { targetRequestId: requestId });
+      if (ok) setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      return ok;
+    },
+    [callHostAction]
+  );
+
   return {
     connectionState,
     tiles: Object.values(tiles),
@@ -376,6 +449,8 @@ export function useMeetingRoom({
     isHost: Boolean(isHost),
     roomLocked,
     hostActionError,
+    waitingRoomEnabled,
+    pendingRequests,
     setParticipantVolume,
     toggleParticipantMute,
     setMasterPercent,
@@ -387,6 +462,9 @@ export function useMeetingRoom({
     hostMuteParticipant,
     hostRemoveParticipant,
     toggleRoomLock,
+    toggleWaitingRoom,
+    admitRequest,
+    denyRequest,
     leave,
   };
 }

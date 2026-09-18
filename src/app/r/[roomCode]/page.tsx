@@ -14,6 +14,7 @@ interface TokenResponse {
   wsUrl: string;
   isHost: boolean;
   locked: boolean;
+  waitingRoomEnabled: boolean;
 }
 
 export default function MeetingRoomPage() {
@@ -26,6 +27,7 @@ export default function MeetingRoomPage() {
 
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
   const [sidePanel, setSidePanel] = useState<"chat" | "participants" | null>(null);
   const requestedKeyRef = useRef<string | null>(null);
 
@@ -34,29 +36,82 @@ export default function MeetingRoomPage() {
       router.replace(`/?join=${roomCode}`);
       return;
     }
-    // Next.js dev (Strict Mode) invokes effects twice; each call to /api/token
-    // mints a brand-new random identity server-side, so a duplicate call would
-    // silently create a second, unused "host" identity for the same room. This
-    // guard makes sure exactly one token request ever leaves for this page.
+    // Next.js dev (Strict Mode) invokes effects twice; each call mints a
+    // brand-new random identity server-side, so a duplicate call would
+    // silently create a second, unused identity for the same room. This
+    // guard makes sure exactly one join request ever leaves for this page.
     const key = `${roomCode}:${name}:${wantsHost}`;
     if (requestedKeyRef.current === key) return;
     requestedKeyRef.current = key;
 
-    fetch("/api/token", {
+    // L'hôte entre directement ; un participant passe par la demande de
+    // jonction, qui admet immédiatement si la salle d'attente est désactivée.
+    const url = wantsHost ? "/api/token" : `/api/rooms/${roomCode}/join-request`;
+    const bodyPayload = wantsHost ? { roomCode, name, host: true } : { name };
+
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomCode, name, host: wantsHost }),
+      body: JSON.stringify(bodyPayload),
     })
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Impossible de rejoindre la réunion.");
-        setSession(data);
+        if (data.status === "pending") {
+          setWaitingRequestId(data.requestId);
+          return;
+        }
+        setSession({
+          token: data.token,
+          identity: data.identity,
+          wsUrl: data.wsUrl,
+          isHost: Boolean(data.isHost),
+          locked: Boolean(data.locked),
+          waitingRoomEnabled: Boolean(data.waitingRoomEnabled),
+        });
       })
       .catch((err) => {
         setJoinError(err instanceof Error ? err.message : "Erreur inconnue.");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, name, wantsHost]);
+
+  // Sondage pendant l'attente en salle d'attente : dès que l'hôte admet ou
+  // refuse, on bascule vers la session ou vers l'erreur.
+  useEffect(() => {
+    if (!waitingRequestId) return;
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/rooms/${roomCode}/join-request/${waitingRequestId}`);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.status === "admitted") {
+          setSession({
+            token: data.token,
+            identity: data.identity,
+            wsUrl: data.wsUrl,
+            isHost: false,
+            locked: false,
+            waitingRoomEnabled: false,
+          });
+          setWaitingRequestId(null);
+        } else if (data.status === "denied") {
+          setJoinError("L'hôte a refusé votre demande d'accès à cette réunion.");
+          setWaitingRequestId(null);
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    };
+
+    const interval = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [waitingRequestId, roomCode]);
 
   const meeting = useMeetingRoom({
     wsUrl: session?.wsUrl,
@@ -65,6 +120,7 @@ export default function MeetingRoomPage() {
     roomCode,
     isHost: session?.isHost,
     initialLocked: session?.locked,
+    initialWaitingRoomEnabled: session?.waitingRoomEnabled,
   });
 
   if (joinError) {
@@ -78,6 +134,19 @@ export default function MeetingRoomPage() {
         >
           Retour à l&apos;accueil
         </button>
+      </div>
+    );
+  }
+
+  if (waitingRequestId) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-amber" />
+        <p className="font-display text-2xl font-bold text-paper">Salle d&apos;attente</p>
+        <p className="max-w-sm text-sm text-dust">
+          {name}, l&apos;hôte de la salle {roomCode} doit vous admettre avant que vous puissiez
+          entrer. Cette page se mettra à jour automatiquement.
+        </p>
       </div>
     );
   }
@@ -155,7 +224,12 @@ export default function MeetingRoomPage() {
               isHost={meeting.isHost}
               roomLocked={meeting.roomLocked}
               hostActionError={meeting.hostActionError}
+              waitingRoomEnabled={meeting.waitingRoomEnabled}
+              pendingRequests={meeting.pendingRequests}
               onToggleLock={meeting.toggleRoomLock}
+              onToggleWaitingRoom={meeting.toggleWaitingRoom}
+              onAdmit={meeting.admitRequest}
+              onDeny={meeting.denyRequest}
               onMute={meeting.hostMuteParticipant}
               onRemove={meeting.hostRemoveParticipant}
             />

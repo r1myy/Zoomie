@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { muteParticipantMicrophone, removeParticipant } from "@/lib/livekit/hostActions";
-import { getRoom, isHost, setRoomLocked } from "@/lib/rooms/store";
+import { createRoomToken } from "@/lib/livekit/token";
+import {
+  getJoinRequest,
+  getRoom,
+  isHost,
+  setJoinRequestDecision,
+  setRoomLocked,
+  setWaitingRoomEnabled,
+} from "@/lib/rooms/store";
 
-type HostAction = "mute" | "remove" | "lock" | "unlock";
+type HostAction =
+  | "mute"
+  | "remove"
+  | "lock"
+  | "unlock"
+  | "admit"
+  | "deny"
+  | "enable-waiting-room"
+  | "disable-waiting-room";
 
 export async function POST(
   request: NextRequest,
@@ -14,6 +30,7 @@ export async function POST(
   const callerIdentity = typeof body?.callerIdentity === "string" ? body.callerIdentity : "";
   const action = body?.action as HostAction | undefined;
   const targetIdentity = typeof body?.targetIdentity === "string" ? body.targetIdentity : undefined;
+  const targetRequestId = typeof body?.targetRequestId === "string" ? body.targetRequestId : undefined;
 
   if (!getRoom(roomCode)) {
     return NextResponse.json({ error: "Salle inconnue." }, { status: 404 });
@@ -41,6 +58,31 @@ export async function POST(
       case "unlock":
         setRoomLocked(roomCode, false);
         break;
+      case "enable-waiting-room":
+        setWaitingRoomEnabled(roomCode, true);
+        break;
+      case "disable-waiting-room":
+        setWaitingRoomEnabled(roomCode, false);
+        break;
+      case "admit": {
+        if (!targetRequestId) throw new Error("targetRequestId requis.");
+        const joinRequest = getJoinRequest(targetRequestId);
+        if (!joinRequest || joinRequest.roomCode !== roomCode) {
+          throw new Error("Demande introuvable.");
+        }
+        const token = await createRoomToken({
+          roomCode,
+          identity: joinRequest.identity,
+          displayName: joinRequest.displayName,
+        });
+        setJoinRequestDecision(targetRequestId, "admitted", token);
+        break;
+      }
+      case "deny": {
+        if (!targetRequestId) throw new Error("targetRequestId requis.");
+        setJoinRequestDecision(targetRequestId, "denied");
+        break;
+      }
       default:
         return NextResponse.json({ error: "Action inconnue." }, { status: 400 });
     }
