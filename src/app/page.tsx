@@ -1,20 +1,27 @@
 import { Suspense } from "react";
 import { HeroFaderDemo } from "@/components/home/HeroFaderDemo";
 import { JoinPanel } from "@/components/home/JoinPanel";
+import { AccountBadge } from "@/components/home/AccountBadge";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const accountName =
+    (user?.user_metadata?.full_name as string | undefined)?.trim() || user?.email || null;
+
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between px-6 py-5 sm:px-10">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-6 py-5 sm:px-10">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-teal" />
           <span className="font-display text-xl font-bold tracking-tight text-paper">
             ZOOMIE
           </span>
         </div>
-        <nav className="font-mono text-xs uppercase tracking-[0.15em] text-dust">
-          <span>Réunion • Mixage individuel</span>
-        </nav>
+        <AccountBadge name={accountName} />
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center justify-center gap-12 px-6 py-12 sm:flex-row sm:items-center sm:gap-16">
@@ -39,7 +46,7 @@ export default function Home() {
 
       <section className="flex justify-center px-6 pb-16">
         <Suspense fallback={null}>
-          <JoinPanel />
+          <JoinPanel accountName={accountName} />
         </Suspense>
       </section>
 

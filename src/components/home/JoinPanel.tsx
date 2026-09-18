@@ -6,22 +6,24 @@ import { generateRoomCode, isValidRoomCode } from "@/lib/roomCode";
 
 const NAME_KEY = "zoomie:display-name";
 
-export function JoinPanel() {
+export function JoinPanel({ accountName }: { accountName?: string | null }) {
   const router = useRouter();
   const search = useSearchParams();
   const invitedCode = search.get("join")?.toUpperCase() ?? "";
   const [mode, setMode] = useState<"create" | "join">(invitedCode ? "join" : "create");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(accountName ?? "");
   const [code, setCode] = useState(invitedCode);
   const [error, setError] = useState<string | null>(null);
 
   // Rempli après l'hydratation pour éviter tout écart serveur/client sur la
   // valeur du champ contrôlé — la préférence est propre à ce navigateur.
+  // Un compte connecté a priorité sur la dernière valeur saisie localement.
   useEffect(() => {
+    if (accountName) return;
     const saved = window.localStorage.getItem(NAME_KEY);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync one-time read from localStorage on mount
     if (saved) setName(saved);
-  }, []);
+  }, [accountName]);
 
   function persistName(value: string) {
     setName(value);
