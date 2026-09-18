@@ -7,19 +7,26 @@ export async function GET(
   { params }: { params: Promise<{ code: string; requestId: string }> }
 ) {
   const { requestId } = await params;
-  const joinRequest = getJoinRequest(requestId);
-  if (!joinRequest) {
-    return NextResponse.json({ error: "Demande introuvable." }, { status: 404 });
-  }
+  try {
+    const joinRequest = await getJoinRequest(requestId);
+    if (!joinRequest) {
+      return NextResponse.json({ error: "Demande introuvable." }, { status: 404 });
+    }
 
-  if (joinRequest.status === "admitted") {
-    return NextResponse.json({
-      status: "admitted",
-      token: joinRequest.token,
-      identity: joinRequest.identity,
-      wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
-    });
-  }
+    if (joinRequest.status === "admitted") {
+      return NextResponse.json({
+        status: "admitted",
+        token: joinRequest.token,
+        identity: joinRequest.identity,
+        wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
+      });
+    }
 
-  return NextResponse.json({ status: joinRequest.status });
+    return NextResponse.json({ status: joinRequest.status });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Erreur inconnue." },
+      { status: 500 }
+    );
+  }
 }

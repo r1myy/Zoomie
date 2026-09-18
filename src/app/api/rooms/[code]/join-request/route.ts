@@ -20,18 +20,18 @@ export async function POST(
     return NextResponse.json({ error: "name est requis." }, { status: 400 });
   }
 
-  const room = getRoom(roomCode);
-  if (!room) {
-    return NextResponse.json({ error: "Cette salle n'existe pas ou plus." }, { status: 404 });
-  }
-  if (room.locked) {
-    return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
-  }
+  try {
+    const room = await getRoom(roomCode);
+    if (!room) {
+      return NextResponse.json({ error: "Cette salle n'existe pas ou plus." }, { status: 404 });
+    }
+    if (room.locked) {
+      return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
+    }
 
-  const identity = makeIdentity(displayName);
+    const identity = makeIdentity(displayName);
 
-  if (!room.waitingRoomEnabled) {
-    try {
+    if (!room.waitingRoomEnabled) {
       const token = await createRoomToken({ roomCode, identity, displayName });
       return NextResponse.json({
         status: "admitted",
@@ -40,14 +40,14 @@ export async function POST(
         wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
         locked: room.locked,
       });
-    } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : "Erreur inconnue." },
-        { status: 500 }
-      );
     }
-  }
 
-  const joinRequest = createJoinRequest(roomCode, identity, displayName);
-  return NextResponse.json({ status: "pending", requestId: joinRequest.id });
+    const joinRequest = await createJoinRequest(roomCode, identity, displayName);
+    return NextResponse.json({ status: "pending", requestId: joinRequest.id });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Erreur inconnue." },
+      { status: 500 }
+    );
+  }
 }

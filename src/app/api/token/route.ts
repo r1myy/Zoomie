@@ -14,20 +14,20 @@ export async function POST(request: NextRequest) {
 
   const identity = makeIdentity(displayName);
 
-  const existing = getRoom(roomCode);
-  if (!existing && !wantsHost) {
-    return NextResponse.json(
-      { error: "Cette salle n'existe pas ou plus." },
-      { status: 404 }
-    );
-  }
-  const room = getOrCreateRoom(roomCode, wantsHost ? identity : undefined);
-
-  if (room.locked && room.hostIdentity !== identity) {
-    return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
-  }
-
   try {
+    const existing = await getRoom(roomCode);
+    if (!existing && !wantsHost) {
+      return NextResponse.json(
+        { error: "Cette salle n'existe pas ou plus." },
+        { status: 404 }
+      );
+    }
+    const room = await getOrCreateRoom(roomCode, wantsHost ? identity : undefined);
+
+    if (room.locked && room.hostIdentity !== identity) {
+      return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
+    }
+
     const token = await createRoomToken({ roomCode, identity, displayName });
     return NextResponse.json({
       token,

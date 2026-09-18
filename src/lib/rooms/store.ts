@@ -1,6 +1,11 @@
-// Couche salles : registre en mémoire pour le développement local.
-// À remplacer par Supabase (persistance + temps réel pour la salle d'attente)
-// une fois le projet Supabase configuré — voir le plan du projet.
+// Couche salles — persistée dans Supabase (table `rooms` / `join_requests`,
+// voir supabase/schema.sql) via la clé service_role, qui contourne la RLS.
+// Ces fonctions ne doivent être appelées que depuis des routes serveur de
+// confiance (app/api/**) : le contrôle d'accès (qui est hôte, salle
+// verrouillée…) est géré applicativement ici, pas par des policies RLS.
+
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { JoinRequestRow, RoomRow } from "@/lib/supabase/database.types";
 
 export interface RoomRecord {
   code: string;
@@ -22,69 +27,123 @@ export interface JoinRequest {
   token?: string;
 }
 
-const rooms = new Map<string, RoomRecord>();
-const joinRequests = new Map<string, JoinRequest>();
+function fromRoomRow(row: RoomRow): RoomRecord {
+  return {
+    code: row.code,
+    hostIdentity: row.host_identity,
+    locked: row.locked,
+    waitingRoomEnabled: row.waiting_room_enabled,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
 
-export function getOrCreateRoom(code: string, claimHostIdentity?: string): RoomRecord {
-  const existing = rooms.get(code);
+function fromJoinRequestRow(row: JoinRequestRow): JoinRequest {
+  return {
+    id: row.id,
+    roomCode: row.room_code,
+    identity: row.identity,
+    displayName: row.display_name,
+    status: row.status,
+    token: row.token ?? undefined,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+export async function getOrCreateRoom(
+  code: string,
+  claimHostIdentity?: string
+): Promise<RoomRecord> {
+  const db = createAdminClient();
+
+  const existing = await getRoom(code);
   if (existing) return existing;
 
-  const room: RoomRecord = {
-    code,
-    hostIdentity: claimHostIdentity ?? "",
-    locked: false,
-    waitingRoomEnabled: false,
-    createdAt: Date.now(),
-  };
-  rooms.set(code, room);
-  return room;
+  const { data, error } = await db
+    .from("rooms")
+    .insert({ code, host_identity: claimHostIdentity ?? "" })
+    // Une autre requête a pu créer la salle entre-temps (double appel en
+    // dev, course entre deux onglets) : on retombe alors sur celle-ci.
+    .select()
+    .single();
+
+  if (error) {
+    const existingAfterRace = await getRoom(code);
+    if (existingAfterRace) return existingAfterRace;
+    throw new Error(`Impossible de créer la salle : ${error.message}`);
+  }
+
+  return fromRoomRow(data as RoomRow);
 }
 
-export function getRoom(code: string): RoomRecord | undefined {
-  return rooms.get(code);
+export async function getRoom(code: string): Promise<RoomRecord | undefined> {
+  const db = createAdminClient();
+  const { data, error } = await db.from("rooms").select().eq("code", code).maybeSingle();
+  if (error) throw new Error(`Lecture de la salle impossible : ${error.message}`);
+  return data ? fromRoomRow(data as RoomRow) : undefined;
 }
 
-export function setRoomLocked(code: string, locked: boolean) {
-  const room = rooms.get(code);
-  if (room) room.locked = locked;
+export async function setRoomLocked(code: string, locked: boolean) {
+  const db = createAdminClient();
+  await db.from("rooms").update({ locked }).eq("code", code);
 }
 
-export function setWaitingRoomEnabled(code: string, enabled: boolean) {
-  const room = rooms.get(code);
-  if (room) room.waitingRoomEnabled = enabled;
+export async function setWaitingRoomEnabled(code: string, enabled: boolean) {
+  const db = createAdminClient();
+  await db.from("rooms").update({ waiting_room_enabled: enabled }).eq("code", code);
 }
 
-export function isHost(code: string, identity: string): boolean {
-  return rooms.get(code)?.hostIdentity === identity;
+export async function isHost(code: string, identity: string): Promise<boolean> {
+  const room = await getRoom(code);
+  return room?.hostIdentity === identity;
 }
 
-export function createJoinRequest(roomCode: string, identity: string, displayName: string): JoinRequest {
-  const request: JoinRequest = {
-    id: Math.random().toString(36).slice(2, 10),
-    roomCode,
-    identity,
-    displayName,
-    status: "pending",
-    createdAt: Date.now(),
-  };
-  joinRequests.set(request.id, request);
-  return request;
+export async function createJoinRequest(
+  roomCode: string,
+  identity: string,
+  displayName: string
+): Promise<JoinRequest> {
+  const db = createAdminClient();
+  const id = Math.random().toString(36).slice(2, 10);
+  const { data, error } = await db
+    .from("join_requests")
+    .insert({ id, room_code: roomCode, identity, display_name: displayName })
+    .select()
+    .single();
+  if (error) throw new Error(`Impossible de créer la demande : ${error.message}`);
+  return fromJoinRequestRow(data as JoinRequestRow);
 }
 
-export function getJoinRequest(id: string): JoinRequest | undefined {
-  return joinRequests.get(id);
+export async function getJoinRequest(id: string): Promise<JoinRequest | undefined> {
+  const db = createAdminClient();
+  const { data, error } = await db.from("join_requests").select().eq("id", id).maybeSingle();
+  if (error) throw new Error(`Lecture de la demande impossible : ${error.message}`);
+  return data ? fromJoinRequestRow(data as JoinRequestRow) : undefined;
 }
 
-export function listPendingJoinRequests(roomCode: string): JoinRequest[] {
-  return Array.from(joinRequests.values())
-    .filter((r) => r.roomCode === roomCode && r.status === "pending")
-    .sort((a, b) => a.createdAt - b.createdAt);
+export async function listPendingJoinRequests(roomCode: string): Promise<JoinRequest[]> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("join_requests")
+    .select()
+    .eq("room_code", roomCode)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(`Lecture de la salle d'attente impossible : ${error.message}`);
+  return (data as JoinRequestRow[]).map(fromJoinRequestRow);
 }
 
-export function setJoinRequestDecision(id: string, status: "admitted" | "denied", token?: string) {
-  const request = joinRequests.get(id);
-  if (!request) return undefined;
-  request.status = status;
-  if (token) request.token = token;
-  return request;
+export async function setJoinRequestDecision(
+  id: string,
+  status: "admitted" | "denied",
+  token?: string
+): Promise<JoinRequest | undefined> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("join_requests")
+    .update({ status, ...(token ? { token } : {}) })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`Mise à jour de la demande impossible : ${error.message}`);
+  return data ? fromJoinRequestRow(data as JoinRequestRow) : undefined;
 }

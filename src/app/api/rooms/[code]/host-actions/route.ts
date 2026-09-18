@@ -32,17 +32,17 @@ export async function POST(
   const targetIdentity = typeof body?.targetIdentity === "string" ? body.targetIdentity : undefined;
   const targetRequestId = typeof body?.targetRequestId === "string" ? body.targetRequestId : undefined;
 
-  if (!getRoom(roomCode)) {
-    return NextResponse.json({ error: "Salle inconnue." }, { status: 404 });
-  }
-  if (!isHost(roomCode, callerIdentity)) {
-    return NextResponse.json(
-      { error: "Seul l'hôte de la salle peut faire ceci." },
-      { status: 403 }
-    );
-  }
-
   try {
+    if (!(await getRoom(roomCode))) {
+      return NextResponse.json({ error: "Salle inconnue." }, { status: 404 });
+    }
+    if (!(await isHost(roomCode, callerIdentity))) {
+      return NextResponse.json(
+        { error: "Seul l'hôte de la salle peut faire ceci." },
+        { status: 403 }
+      );
+    }
+
     switch (action) {
       case "mute":
         if (!targetIdentity) throw new Error("targetIdentity requis.");
@@ -53,20 +53,20 @@ export async function POST(
         await removeParticipant(roomCode, targetIdentity);
         break;
       case "lock":
-        setRoomLocked(roomCode, true);
+        await setRoomLocked(roomCode, true);
         break;
       case "unlock":
-        setRoomLocked(roomCode, false);
+        await setRoomLocked(roomCode, false);
         break;
       case "enable-waiting-room":
-        setWaitingRoomEnabled(roomCode, true);
+        await setWaitingRoomEnabled(roomCode, true);
         break;
       case "disable-waiting-room":
-        setWaitingRoomEnabled(roomCode, false);
+        await setWaitingRoomEnabled(roomCode, false);
         break;
       case "admit": {
         if (!targetRequestId) throw new Error("targetRequestId requis.");
-        const joinRequest = getJoinRequest(targetRequestId);
+        const joinRequest = await getJoinRequest(targetRequestId);
         if (!joinRequest || joinRequest.roomCode !== roomCode) {
           throw new Error("Demande introuvable.");
         }
@@ -75,12 +75,12 @@ export async function POST(
           identity: joinRequest.identity,
           displayName: joinRequest.displayName,
         });
-        setJoinRequestDecision(targetRequestId, "admitted", token);
+        await setJoinRequestDecision(targetRequestId, "admitted", token);
         break;
       }
       case "deny": {
         if (!targetRequestId) throw new Error("targetRequestId requis.");
-        setJoinRequestDecision(targetRequestId, "denied");
+        await setJoinRequestDecision(targetRequestId, "denied");
         break;
       }
       default:

@@ -10,14 +10,24 @@ export async function GET(
   const roomCode = code.toUpperCase();
   const callerIdentity = request.nextUrl.searchParams.get("callerIdentity") ?? "";
 
-  if (!isHost(roomCode, callerIdentity)) {
-    return NextResponse.json({ error: "Seul l'hôte peut voir la salle d'attente." }, { status: 403 });
-  }
+  try {
+    if (!(await isHost(roomCode, callerIdentity))) {
+      return NextResponse.json(
+        { error: "Seul l'hôte peut voir la salle d'attente." },
+        { status: 403 }
+      );
+    }
 
-  const pending = listPendingJoinRequests(roomCode).map((r) => ({
-    id: r.id,
-    displayName: r.displayName,
-    createdAt: r.createdAt,
-  }));
-  return NextResponse.json({ pending });
+    const pending = (await listPendingJoinRequests(roomCode)).map((r) => ({
+      id: r.id,
+      displayName: r.displayName,
+      createdAt: r.createdAt,
+    }));
+    return NextResponse.json({ pending });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Erreur inconnue." },
+      { status: 500 }
+    );
+  }
 }
