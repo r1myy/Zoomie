@@ -1,8 +1,10 @@
 "use client";
 
 import type { TileState } from "@/lib/livekit/useMeetingRoom";
+import { InviteSection } from "@/components/meeting/InviteSection";
 
 export function HostPanel({
+  roomCode,
   tiles,
   isHost,
   roomLocked,
@@ -11,6 +13,7 @@ export function HostPanel({
   onMute,
   onRemove,
 }: {
+  roomCode: string;
   tiles: TileState[];
   isHost: boolean;
   roomLocked: boolean;
@@ -31,6 +34,8 @@ export function HostPanel({
           {tiles.length} dans la salle
         </p>
       </div>
+
+      <InviteSection roomCode={roomCode} />
 
       <div className="border-b border-line px-4 py-3">
         {isHost ? (

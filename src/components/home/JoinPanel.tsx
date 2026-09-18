@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { generateRoomCode, isValidRoomCode } from "@/lib/roomCode";
 
@@ -8,9 +8,11 @@ const NAME_KEY = "zoomie:display-name";
 
 export function JoinPanel() {
   const router = useRouter();
-  const [mode, setMode] = useState<"create" | "join">("create");
+  const search = useSearchParams();
+  const invitedCode = search.get("join")?.toUpperCase() ?? "";
+  const [mode, setMode] = useState<"create" | "join">(invitedCode ? "join" : "create");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(invitedCode);
   const [error, setError] = useState<string | null>(null);
 
   // Rempli après l'hydratation pour éviter tout écart serveur/client sur la

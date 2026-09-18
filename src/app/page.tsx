@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { HeroFaderDemo } from "@/components/home/HeroFaderDemo";
 import { JoinPanel } from "@/components/home/JoinPanel";
 
@@ -37,7 +38,9 @@ export default function Home() {
       </main>
 
       <section className="flex justify-center px-6 pb-16">
-        <JoinPanel />
+        <Suspense fallback={null}>
+          <JoinPanel />
+        </Suspense>
       </section>
 
       <footer className="border-t border-line px-6 py-6 text-center font-mono text-[11px] text-dust-dim">

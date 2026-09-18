@@ -150,6 +150,7 @@ export default function MeetingRoomPage() {
         {sidePanel === "participants" && (
           <div className="w-72 shrink-0">
             <HostPanel
+              roomCode={roomCode}
               tiles={meeting.tiles}
               isHost={meeting.isHost}
               roomLocked={meeting.roomLocked}
