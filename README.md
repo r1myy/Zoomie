@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Zoomie
 
-## Getting Started
+Visioconférence avec mixeur de volume individuel — chaque participant règle, de son côté et en
+direct, le volume qu'il perçoit de chacun des autres, sans jamais changer ce que les autres
+entendent. Inspiré de SonoBus.
 
-First, run the development server:
+## Démarrer en local
+
+Il faut deux serveurs en parallèle : le serveur média LiveKit (SFU) et l'app Next.js.
+
+**1. Serveur LiveKit** (une fois : `brew install livekit`) :
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+livekit-server --dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Écoute sur `ws://localhost:7880` avec les clés de dev par défaut (`devkey` / `secret`). Détails
+dans [`livekit/README.md`](livekit/README.md).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**2. Variables d'environnement** — copiez `.env.local.example` en `.env.local` (déjà pré-rempli
+pour le dev local ; les clés Supabase restent à ajouter quand ce sera branché).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**3. App Next.js :**
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Ouvrez [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Fonctionnalités livrées
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Réunion vidéo multi-participants (grille), avec mise en évidence de l'orateur actif
+- **Mixeur audio individuel** : curseur de volume (0–150 %) et vu-mètre par participant,
+  appliqué localement via Web Audio API (`src/lib/audio/mixerEngine.ts`) — jamais renvoyé au
+  serveur. Réglages sauvegardés par nom de participant dans `localStorage`.
+- Volume général de sortie, en plus des réglages individuels
+- Chat texte en direct (data-channel LiveKit)
+- Partage d'écran (un seul à la fois)
+- Salle d'attente optionnelle, activable par l'hôte
+- Contrôles hôte : couper le micro d'un participant pour tout le monde, l'exclure, verrouiller
+  la salle
+- Invitation : lien copiable, code copiable, partage natif, courriel, WhatsApp
+- Accès invité sans compte (comptes persistants prévus via Supabase, pas encore branché)
 
-## Deploy on Vercel
+## Architecture
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **SFU** : LiveKit self-hosted — chaque flux audio distant reste séparé jusqu'au client, ce qui
+  rend le mixeur individuel possible (un SFU qui mixerait déjà l'audio empêcherait ça).
+- **Salles/hôte/salle d'attente** : registre en mémoire côté serveur pour l'instant
+  (`src/lib/rooms/store.ts`) — ne survit pas à un redémarrage du serveur. À migrer vers Supabase.
+- **Next.js App Router**, TypeScript, Tailwind CSS v4.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Le plan d'implémentation détaillé vit dans la mémoire de l'assistant si vous y avez accès, sinon
+ce README et l'historique de commits font foi.
+
+## À venir
+
+- Intégration Supabase : comptes persistants, salles qui survivent à un redémarrage, historique
+  des réunions
+- Application desktop (Electron), après stabilisation du web
