@@ -11,18 +11,20 @@ export function ParticipantTile({
   onVolumeChange,
   onToggleMute,
   wide,
+  isSpeaking,
 }: {
   tile: TileState;
   getLevel: (identity: string) => number;
   onVolumeChange: (identity: string, percent: number) => void;
   onToggleMute: (identity: string) => void;
   wide?: boolean;
+  isSpeaking?: boolean;
 }) {
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-md border border-line bg-panel ${
-        wide ? "col-span-full" : ""
-      }`}
+      className={`flex flex-col overflow-hidden rounded-md border bg-panel transition-shadow ${
+        isSpeaking ? "border-teal/70 shadow-[0_0_0_2px_rgba(79,199,181,0.35)]" : "border-line"
+      } ${wide ? "col-span-full" : ""}`}
     >
       <div className="relative aspect-video w-full bg-console">
         <VideoSurface track={tile.videoTrack} mirrored={tile.isLocal && !tile.isScreenShare} />

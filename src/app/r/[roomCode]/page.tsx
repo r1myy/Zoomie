@@ -200,6 +200,7 @@ export default function MeetingRoomPage() {
                 getLevel={meeting.getLevel}
                 onVolumeChange={meeting.setParticipantVolume}
                 onToggleMute={meeting.toggleParticipantMute}
+                isSpeaking={meeting.activeSpeakerIds.includes(localTile.identity)}
               />
             )}
             {remoteTiles.map((tile) => (
@@ -209,6 +210,7 @@ export default function MeetingRoomPage() {
                 getLevel={meeting.getLevel}
                 onVolumeChange={meeting.setParticipantVolume}
                 onToggleMute={meeting.toggleParticipantMute}
+                isSpeaking={meeting.activeSpeakerIds.includes(tile.identity)}
               />
             ))}
           </div>

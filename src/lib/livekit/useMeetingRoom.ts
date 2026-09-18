@@ -90,6 +90,7 @@ export function useMeetingRoom({
   const [hostActionError, setHostActionError] = useState<string | null>(null);
   const [waitingRoomEnabled, setWaitingRoomEnabled] = useState(Boolean(initialWaitingRoomEnabled));
   const [pendingRequests, setPendingRequests] = useState<WaitingParticipant[]>([]);
+  const [activeSpeakerIds, setActiveSpeakerIds] = useState<string[]>([]);
 
   const patchTile = useCallback((id: string, patch: Partial<TileState>) => {
     setTiles((prev) => {
@@ -112,6 +113,9 @@ export function useMeetingRoom({
     };
 
     room.on(RoomEvent.ConnectionStateChanged, setConnectionState);
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      setActiveSpeakerIds(speakers.map((p) => p.identity));
+    });
 
     room.on(RoomEvent.ParticipantConnected, (p) => upsertFromParticipant(p, false));
     room.on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
@@ -451,6 +455,7 @@ export function useMeetingRoom({
     hostActionError,
     waitingRoomEnabled,
     pendingRequests,
+    activeSpeakerIds,
     setParticipantVolume,
     toggleParticipantMute,
     setMasterPercent,
