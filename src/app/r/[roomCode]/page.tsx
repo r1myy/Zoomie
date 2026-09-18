@@ -165,9 +165,9 @@ export default function MeetingRoomPage() {
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-teal" />
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-line px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-teal" />
           <span className="font-display text-lg font-bold text-paper">ZOOMIE</span>
           <span className="font-mono text-xs text-dust-dim">· {roomCode}</span>
           {meeting.roomLocked && (
@@ -176,11 +176,13 @@ export default function MeetingRoomPage() {
             </span>
           )}
         </div>
-        {meeting.error && <p className="text-xs text-danger">{meeting.error}</p>}
+        {meeting.error && (
+          <p className="w-full text-xs text-danger sm:w-auto">{meeting.error}</p>
+        )}
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className={`flex-1 overflow-y-auto p-4 ${sidePanel ? "hidden sm:block" : ""}`}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {screenShareTile && (
               <ParticipantTile
@@ -212,12 +214,12 @@ export default function MeetingRoomPage() {
           </div>
         </div>
         {sidePanel === "chat" && (
-          <div className="w-72 shrink-0">
+          <div className="w-full shrink-0 sm:w-72">
             <ChatPanel messages={meeting.messages} onSend={meeting.sendChat} />
           </div>
         )}
         {sidePanel === "participants" && (
-          <div className="w-72 shrink-0">
+          <div className="w-full shrink-0 sm:w-72">
             <HostPanel
               roomCode={roomCode}
               tiles={meeting.tiles}
@@ -226,6 +228,8 @@ export default function MeetingRoomPage() {
               hostActionError={meeting.hostActionError}
               waitingRoomEnabled={meeting.waitingRoomEnabled}
               pendingRequests={meeting.pendingRequests}
+              masterPercent={meeting.masterPercent}
+              onMasterVolumeChange={meeting.setMasterPercent}
               onToggleLock={meeting.toggleRoomLock}
               onToggleWaitingRoom={meeting.toggleWaitingRoom}
               onAdmit={meeting.admitRequest}

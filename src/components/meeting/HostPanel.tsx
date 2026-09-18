@@ -2,6 +2,7 @@
 
 import type { TileState, WaitingParticipant } from "@/lib/livekit/useMeetingRoom";
 import { InviteSection } from "@/components/meeting/InviteSection";
+import { MasterVolumeSection } from "@/components/meeting/MasterVolumeSection";
 
 export function HostPanel({
   roomCode,
@@ -11,6 +12,8 @@ export function HostPanel({
   hostActionError,
   waitingRoomEnabled,
   pendingRequests,
+  masterPercent,
+  onMasterVolumeChange,
   onToggleLock,
   onToggleWaitingRoom,
   onAdmit,
@@ -25,6 +28,8 @@ export function HostPanel({
   hostActionError: string | null;
   waitingRoomEnabled: boolean;
   pendingRequests: WaitingParticipant[];
+  masterPercent: number;
+  onMasterVolumeChange: (percent: number) => void;
   onToggleLock: () => void;
   onToggleWaitingRoom: () => void;
   onAdmit: (requestId: string) => void;
@@ -44,6 +49,8 @@ export function HostPanel({
           {tiles.length} dans la salle
         </p>
       </div>
+
+      <MasterVolumeSection percent={masterPercent} onChange={onMasterVolumeChange} />
 
       <InviteSection roomCode={roomCode} />
 
