@@ -38,6 +38,22 @@ export function ParticipantTile({
             {tile.name.slice(0, 1).toUpperCase()}
           </div>
         )}
+        {tile.handRaised && (
+          <div
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-amber text-base shadow-[0_2px_8px_rgba(0,0,0,0.4)]"
+            title={`${tile.name.split("#")[0]} a levé la main`}
+          >
+            ✋
+          </div>
+        )}
+        {tile.reaction && (
+          <div
+            key={tile.reaction.id}
+            className="reaction-pop pointer-events-none absolute bottom-2 right-2 text-3xl"
+          >
+            {tile.reaction.emoji}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 border-t border-line px-3 py-2">

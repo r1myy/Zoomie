@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRoomToken, makeIdentity } from "@/lib/livekit/token";
+import { isParticipantConnected } from "@/lib/livekit/hostActions";
 import { getRoom, createJoinRequest, reclaimRoomIfOwner } from "@/lib/rooms/store";
 import { createClient as createSessionClient } from "@/lib/supabase/server";
 
@@ -38,7 +39,13 @@ export async function POST(
       data: { user },
     } = await session.auth.getUser();
 
-    const reclaimed = await reclaimRoomIfOwner(roomCode, identity, user?.id);
+    // Si l'hôte a déjà une session active (ex. un autre onglet, même compte),
+    // on ne lui reprend pas la main en dessous des pieds pour ce nouvel
+    // arrivant — il rejoint comme un participant normal à la place.
+    const currentHostStillConnected = await isParticipantConnected(roomCode, room.hostIdentity);
+    const reclaimed = currentHostStillConnected
+      ? undefined
+      : await reclaimRoomIfOwner(roomCode, identity, user?.id);
     if (reclaimed) {
       const token = await createRoomToken({ roomCode, identity, displayName });
       return NextResponse.json({

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { muteParticipantMicrophone, removeParticipant } from "@/lib/livekit/hostActions";
+import {
+  endMeetingForEveryone,
+  muteParticipantMicrophone,
+  removeParticipant,
+} from "@/lib/livekit/hostActions";
 import { createRoomToken } from "@/lib/livekit/token";
 import {
   getJoinRequest,
@@ -18,7 +22,8 @@ type HostAction =
   | "admit"
   | "deny"
   | "enable-waiting-room"
-  | "disable-waiting-room";
+  | "disable-waiting-room"
+  | "end-meeting";
 
 export async function POST(
   request: NextRequest,
@@ -63,6 +68,9 @@ export async function POST(
         break;
       case "disable-waiting-room":
         await setWaitingRoomEnabled(roomCode, false);
+        break;
+      case "end-meeting":
+        await endMeetingForEveryone(roomCode);
         break;
       case "admit": {
         if (!targetRequestId) throw new Error("targetRequestId requis.");

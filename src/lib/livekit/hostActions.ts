@@ -24,3 +24,25 @@ export async function muteParticipantMicrophone(roomCode: string, targetIdentity
 export async function removeParticipant(roomCode: string, targetIdentity: string) {
   await client().removeParticipant(roomCode, targetIdentity);
 }
+
+// Utilisé avant de reprendre le rôle hôte pour un propriétaire qui revient
+// (voir reclaimRoomIfOwner) : si son ancienne session est encore active
+// (ex. deux onglets connectés au même compte), on ne lui vole pas le rôle
+// hôte en dessous des pieds.
+export async function isParticipantConnected(roomCode: string, identity: string): Promise<boolean> {
+  if (!identity) return false;
+  try {
+    const participants = await client().listParticipants(roomCode);
+    return participants.some((p) => p.identity === identity);
+  } catch {
+    // Salle LiveKit inexistante (personne connecté) — donc personne à protéger.
+    return false;
+  }
+}
+
+// Déconnecte tout le monde d'un coup (DisconnectReason.ROOM_DELETED côté
+// client) — distinct de "quitter seul", qui laisse la réunion continuer
+// pour les autres.
+export async function endMeetingForEveryone(roomCode: string) {
+  await client().deleteRoom(roomCode);
+}

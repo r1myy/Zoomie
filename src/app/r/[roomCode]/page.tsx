@@ -8,6 +8,27 @@ import { Toolbar } from "@/components/meeting/Toolbar";
 import { ChatPanel } from "@/components/meeting/ChatPanel";
 import { HostPanel } from "@/components/meeting/HostPanel";
 import { DeviceSettings } from "@/components/meeting/DeviceSettings";
+import { LeaveConfirmDialog } from "@/components/meeting/LeaveConfirmDialog";
+import type { LeftMeetingReason } from "@/lib/livekit/useMeetingRoom";
+
+const LEFT_REASON_COPY: Record<LeftMeetingReason, { title: string; body: string }> = {
+  left: {
+    title: "Vous avez quitté la réunion",
+    body: "À bientôt.",
+  },
+  ended: {
+    title: "Réunion terminée",
+    body: "L'hôte a terminé la réunion pour tout le monde.",
+  },
+  removed: {
+    title: "Vous avez été exclu",
+    body: "L'hôte vous a retiré de cette réunion.",
+  },
+  disconnected: {
+    title: "Connexion interrompue",
+    body: "La connexion à la réunion a été perdue.",
+  },
+};
 
 interface TokenResponse {
   token: string;
@@ -30,6 +51,7 @@ export default function MeetingRoomPage() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
   const [sidePanel, setSidePanel] = useState<"chat" | "participants" | "devices" | null>(null);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const requestedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -160,6 +182,22 @@ export default function MeetingRoomPage() {
     );
   }
 
+  if (meeting.leftReason) {
+    const copy = LEFT_REASON_COPY[meeting.leftReason];
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="font-display text-2xl font-bold text-paper">{copy.title}</p>
+        <p className="max-w-sm text-sm text-dust">{copy.body}</p>
+        <button
+          onClick={() => router.push("/")}
+          className="mt-2 rounded-sm bg-amber px-4 py-2 text-sm font-semibold text-console"
+        >
+          Retour à l&apos;accueil
+        </button>
+      </div>
+    );
+  }
+
   const localTile = meeting.tiles.find((t) => t.isLocal);
   const remoteTiles = meeting.tiles.filter((t) => !t.isLocal);
   const screenShareTile = meeting.tiles.find((t) => t.isScreenShare);
@@ -256,17 +294,34 @@ export default function MeetingRoomPage() {
         chatOpen={sidePanel === "chat"}
         participantsOpen={sidePanel === "participants"}
         devicesOpen={sidePanel === "devices"}
+        handRaised={localTile?.handRaised ?? false}
         onToggleMic={meeting.toggleMic}
         onToggleCam={meeting.toggleCam}
         onToggleShare={meeting.toggleScreenShare}
         onToggleChat={() => setSidePanel((v) => (v === "chat" ? null : "chat"))}
         onToggleParticipants={() => setSidePanel((v) => (v === "participants" ? null : "participants"))}
         onToggleDevices={() => setSidePanel((v) => (v === "devices" ? null : "devices"))}
-        onLeave={() => {
-          meeting.leave();
-          router.push("/");
-        }}
+        onSendReaction={meeting.sendReaction}
+        onToggleHand={meeting.toggleRaiseHand}
+        onOpenLeaveConfirm={() => setLeaveDialogOpen(true)}
       />
+
+      {leaveDialogOpen && (
+        <LeaveConfirmDialog
+          isHost={meeting.isHost}
+          onCancel={() => setLeaveDialogOpen(false)}
+          onLeaveOnly={() => {
+            setLeaveDialogOpen(false);
+            meeting.leave();
+            router.push("/");
+          }}
+          onEndForEveryone={async () => {
+            setLeaveDialogOpen(false);
+            await meeting.endMeetingForEveryone();
+            router.push("/");
+          }}
+        />
+      )}
     </div>
   );
 }

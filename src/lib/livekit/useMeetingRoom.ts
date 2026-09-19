@@ -34,7 +34,11 @@ export interface TileState {
   camEnabled: boolean;
   volumePercent: number;
   muted: boolean;
+  handRaised: boolean;
+  reaction: { emoji: string; id: number } | null;
 }
+
+export type LeftMeetingReason = "left" | "ended" | "removed" | "disconnected";
 
 export interface ChatMessage {
   id: string;
@@ -45,6 +49,8 @@ export interface ChatMessage {
 
 const CHAT_TOPIC = "chat";
 const ROOM_STATE_TOPIC = "room-state";
+const REACTION_TOPIC = "reaction";
+const REACTION_DURATION_MS = 2500;
 
 function tileFromParticipant(p: Participant, isLocal: boolean): TileState {
   const stored = isLocal ? { percent: 100, muted: false } : getStoredVolume(p.name || p.identity);
@@ -58,6 +64,8 @@ function tileFromParticipant(p: Participant, isLocal: boolean): TileState {
     camEnabled: p.isCameraEnabled,
     volumePercent: stored.percent,
     muted: stored.muted,
+    handRaised: false,
+    reaction: null,
   };
 }
 
@@ -86,6 +94,7 @@ export function useMeetingRoom({
 }) {
   const roomRef = useRef<Room | null>(null);
   const mixerRef = useRef<MixerEngine | null>(null);
+  const selfInitiatedRef = useRef<"left" | "ended" | null>(null);
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     ConnectionState.Disconnected
   );
@@ -99,6 +108,7 @@ export function useMeetingRoom({
   const [waitingRoomEnabled, setWaitingRoomEnabled] = useState(Boolean(initialWaitingRoomEnabled));
   const [pendingRequests, setPendingRequests] = useState<WaitingParticipant[]>([]);
   const [activeSpeakerIds, setActiveSpeakerIds] = useState<string[]>([]);
+  const [leftReason, setLeftReason] = useState<LeftMeetingReason | null>(null);
 
   const patchTile = useCallback((id: string, patch: Partial<TileState>) => {
     setTiles((prev) => {
@@ -204,10 +214,41 @@ export function useMeetingRoom({
       });
     });
 
+    room.registerTextStreamHandler(REACTION_TOPIC, (reader, participantInfo) => {
+      reader.readAll().then((text) => {
+        try {
+          const parsed = JSON.parse(text) as
+            | { kind: "burst"; emoji: string }
+            | { kind: "hand"; raised: boolean };
+          if (parsed.kind === "burst") {
+            const reactionId = Date.now();
+            patchTile(participantInfo.identity, { reaction: { emoji: parsed.emoji, id: reactionId } });
+            setTimeout(() => {
+              setTiles((prev) => {
+                const tile = prev[participantInfo.identity];
+                if (!tile || tile.reaction?.id !== reactionId) return prev;
+                return { ...prev, [participantInfo.identity]: { ...tile, reaction: null } };
+              });
+            }, REACTION_DURATION_MS);
+          } else if (parsed.kind === "hand") {
+            patchTile(participantInfo.identity, { handRaised: parsed.raised });
+          }
+        } catch {
+          // ignore malformed payloads
+        }
+      });
+    });
+
     room.on(RoomEvent.Disconnected, (reason) => {
       setConnectionState(ConnectionState.Disconnected);
-      if (reason === DisconnectReason.PARTICIPANT_REMOVED) {
-        setError("Vous avez été exclu de la réunion par l'hôte.");
+      if (selfInitiatedRef.current) {
+        setLeftReason(selfInitiatedRef.current);
+      } else if (reason === DisconnectReason.ROOM_DELETED) {
+        setLeftReason("ended");
+      } else if (reason === DisconnectReason.PARTICIPANT_REMOVED) {
+        setLeftReason("removed");
+      } else {
+        setLeftReason("disconnected");
       }
     });
 
@@ -398,7 +439,39 @@ export function useMeetingRoom({
     ]);
   }, []);
 
+  const sendReaction = useCallback((emoji: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    void room.localParticipant.sendText(JSON.stringify({ kind: "burst", emoji }), {
+      topic: REACTION_TOPIC,
+    });
+    const reactionId = Date.now();
+    patchTile(room.localParticipant.identity, { reaction: { emoji, id: reactionId } });
+    setTimeout(() => {
+      setTiles((prev) => {
+        const tile = prev[room.localParticipant.identity];
+        if (!tile || tile.reaction?.id !== reactionId) return prev;
+        return { ...prev, [room.localParticipant.identity]: { ...tile, reaction: null } };
+      });
+    }, REACTION_DURATION_MS);
+  }, [patchTile]);
+
+  const toggleRaiseHand = useCallback(() => {
+    const room = roomRef.current;
+    if (!room) return;
+    setTiles((prev) => {
+      const tile = prev[room.localParticipant.identity];
+      if (!tile) return prev;
+      const next = !tile.handRaised;
+      void room.localParticipant.sendText(JSON.stringify({ kind: "hand", raised: next }), {
+        topic: REACTION_TOPIC,
+      });
+      return { ...prev, [room.localParticipant.identity]: { ...tile, handRaised: next } };
+    });
+  }, []);
+
   const leave = useCallback(() => {
+    selfInitiatedRef.current = "left";
     roomRef.current?.disconnect();
   }, []);
 
@@ -412,7 +485,8 @@ export function useMeetingRoom({
         | "admit"
         | "deny"
         | "enable-waiting-room"
-        | "disable-waiting-room",
+        | "disable-waiting-room"
+        | "end-meeting",
       opts?: { targetIdentity?: string; targetRequestId?: string }
     ) => {
       if (!roomCode || !identity) return false;
@@ -482,6 +556,20 @@ export function useMeetingRoom({
     [callHostAction]
   );
 
+  // Termine la réunion pour tout le monde (RoomServiceClient.deleteRoom) —
+  // distinct de leave(), qui laisse la réunion continuer sans l'hôte.
+  const endMeetingForEveryone = useCallback(async () => {
+    selfInitiatedRef.current = "ended";
+    const ok = await callHostAction("end-meeting");
+    if (!ok) {
+      selfInitiatedRef.current = null;
+    }
+    // deleteRoom déclenche lui-même RoomEvent.Disconnected(ROOM_DELETED)
+    // pour tout le monde, y compris l'hôte : pas besoin d'appeler
+    // room.disconnect() ici.
+    return ok;
+  }, [callHostAction]);
+
   return {
     connectionState,
     tiles: Object.values(tiles),
@@ -496,6 +584,7 @@ export function useMeetingRoom({
     waitingRoomEnabled,
     pendingRequests,
     activeSpeakerIds,
+    leftReason,
     setParticipantVolume,
     toggleParticipantMute,
     setMasterPercent,
@@ -511,6 +600,9 @@ export function useMeetingRoom({
     toggleWaitingRoom,
     admitRequest,
     denyRequest,
+    sendReaction,
+    toggleRaiseHand,
+    endMeetingForEveryone,
     leave,
   };
 }
