@@ -20,11 +20,34 @@ export class MixerEngine {
   private ctx: AudioContext;
   private master: GainNode;
   private nodes = new Map<string, ParticipantNodes>();
+  // La sortie ne passe pas directement par ctx.destination : elle transite
+  // par un <audio> caché, seul moyen fiable de choisir le haut-parleur de
+  // sortie (setSinkId n'existe que sur HTMLMediaElement, pas AudioContext,
+  // dans la plupart des navigateurs).
+  private outputEl: HTMLAudioElement;
 
   constructor() {
     this.ctx = new AudioContext();
     this.master = this.ctx.createGain();
-    this.master.connect(this.ctx.destination);
+    const destinationNode = this.ctx.createMediaStreamDestination();
+    this.master.connect(destinationNode);
+
+    this.outputEl = document.createElement("audio");
+    this.outputEl.autoplay = true;
+    this.outputEl.srcObject = destinationNode.stream;
+    this.outputEl.hidden = true;
+    document.body.appendChild(this.outputEl);
+  }
+
+  get outputDeviceSelectionSupported(): boolean {
+    return "setSinkId" in this.outputEl;
+  }
+
+  async setOutputDevice(deviceId: string): Promise<void> {
+    if (!this.outputDeviceSelectionSupported) {
+      throw new Error("Ce navigateur ne permet pas de choisir le haut-parleur de sortie.");
+    }
+    await this.outputEl.setSinkId(deviceId);
   }
 
   async resume() {
@@ -91,5 +114,7 @@ export class MixerEngine {
     }
     this.master.disconnect();
     void this.ctx.close();
+    this.outputEl.srcObject = null;
+    this.outputEl.remove();
   }
 }

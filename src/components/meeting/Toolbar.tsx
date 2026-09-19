@@ -78,7 +78,7 @@ export function Toolbar({
       <ToolbarButton label="Participants" active={participantsOpen} onClick={onToggleParticipants}>
         👥
       </ToolbarButton>
-      <ToolbarButton label="Microphone et caméra" active={devicesOpen} onClick={onToggleDevices}>
+      <ToolbarButton label="Microphone, caméra et sortie audio" active={devicesOpen} onClick={onToggleDevices}>
         ⚙️
       </ToolbarButton>
       <ToolbarButton label="Quitter la réunion" danger onClick={onLeave}>

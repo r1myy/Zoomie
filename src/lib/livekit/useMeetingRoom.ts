@@ -17,8 +17,10 @@ import { MixerEngine } from "@/lib/audio/mixerEngine";
 import { getStoredVolume, setStoredVolume } from "@/lib/audio/volumePrefs";
 import {
   getPreferredAudioDevice,
+  getPreferredOutputDevice,
   getPreferredVideoDevice,
   setPreferredAudioDevice,
+  setPreferredOutputDevice,
   setPreferredVideoDevice,
 } from "@/lib/media/devicePrefs";
 
@@ -213,6 +215,10 @@ export function useMeetingRoom({
       try {
         await room.connect(wsUrl, token);
         await mixer.resume();
+        const preferredOutput = getPreferredOutputDevice();
+        if (preferredOutput && mixer.outputDeviceSelectionSupported) {
+          await mixer.setOutputDevice(preferredOutput).catch(() => {});
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Impossible de rejoindre la réunion.");
         return;
@@ -345,7 +351,15 @@ export function useMeetingRoom({
   }, [patchTile]);
 
   const switchDevice = useCallback(
-    async (kind: "audioinput" | "videoinput", deviceId: string) => {
+    async (kind: "audioinput" | "videoinput" | "audiooutput", deviceId: string) => {
+      if (kind === "audiooutput") {
+        // La sortie ne passe pas par LiveKit (rendu audio désactivé, tout
+        // transite par le mixeur individuel) : c'est le mixeur qui choisit
+        // le haut-parleur, pas room.switchActiveDevice.
+        await mixerRef.current?.setOutputDevice(deviceId);
+        setPreferredOutputDevice(deviceId);
+        return;
+      }
       const room = roomRef.current;
       if (!room) return;
       await room.switchActiveDevice(kind, deviceId);
