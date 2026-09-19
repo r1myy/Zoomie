@@ -23,7 +23,7 @@ const USE_CASES = [
 
 export function UseCasesSection() {
   return (
-    <section id="cas-usage" className="border-t border-line px-6 py-20 sm:px-10">
+    <section id="cas-usage" className="border-t border-line bg-panel px-6 py-20 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <Reveal className="max-w-lg">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-teal">Conçu pour</p>
@@ -35,7 +35,7 @@ export function UseCasesSection() {
         <div className="mt-12 grid gap-4 sm:grid-cols-3">
           {USE_CASES.map((useCase, i) => (
             <Reveal key={useCase.title} delayMs={i * 120}>
-              <div className="h-full rounded-md border border-line bg-panel p-6">
+              <div className="h-full rounded-md border border-line bg-panel-raised p-6">
                 <div className="flex h-11 w-11 items-center justify-center rounded-sm border border-line bg-console text-amber">
                   <useCase.icon />
                 </div>

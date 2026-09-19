@@ -48,7 +48,7 @@ export function FeaturesSection() {
     <section className="border-t border-line px-6 py-20 sm:px-10">
       <div className="mx-auto max-w-5xl">
         <Reveal className="max-w-lg">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-teal">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber">
             Tout ce qu&apos;il faut pour une réunion
           </p>
           <h2 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-paper sm:text-5xl">

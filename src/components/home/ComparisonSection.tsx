@@ -29,7 +29,7 @@ export function ComparisonSection() {
   }, []);
 
   return (
-    <section className="border-t border-line px-6 py-20 sm:px-10">
+    <section className="border-t border-line bg-panel px-6 py-20 sm:px-10">
       <div className="mx-auto grid max-w-5xl gap-12 md:grid-cols-[1.1fr_1fr] md:items-center">
         <Reveal>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-teal">
@@ -47,7 +47,7 @@ export function ComparisonSection() {
 
         <Reveal delayMs={150}>
           <div ref={panelRef} className="grid grid-cols-2 gap-3">
-            <div className="rounded-md border border-line bg-panel p-4">
+            <div className="rounded-md border border-line bg-panel-raised p-4">
               <p className="font-mono text-[10px] uppercase tracking-wide text-dust-dim">
                 Mixage serveur
               </p>
@@ -59,7 +59,7 @@ export function ComparisonSection() {
               </p>
             </div>
 
-            <div className="rounded-md border border-teal/30 bg-panel p-4">
+            <div className="rounded-md border border-teal/30 bg-panel-raised p-4">
               <p className="font-mono text-[10px] uppercase tracking-wide text-teal">Zoomie</p>
               <div className="mt-4 flex h-28 items-end justify-center gap-2">
                 {ZOOMIE_LEVELS.map((level, i) => (

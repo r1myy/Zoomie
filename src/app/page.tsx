@@ -90,7 +90,7 @@ export default async function Home() {
       <UseCasesSection />
       <FeaturesSection />
 
-      <section id="commencer" className="border-t border-line px-6 py-24 sm:px-10">
+      <section id="commencer" className="border-t border-line bg-panel px-6 py-24 sm:px-10">
         <Reveal className="mx-auto mb-10 max-w-lg text-center">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-teal">Prêt ?</p>
           <h2 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-paper sm:text-5xl">

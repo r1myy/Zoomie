@@ -5,10 +5,21 @@ import { HowItWorksDiagram } from "@/components/home/HowItWorksDiagram";
 
 export function HowItWorksSection() {
   return (
-    <section id="comment-ca-marche" className="border-t border-line px-6 py-20 sm:px-10">
-      <div className="mx-auto max-w-3xl text-center">
+    <section
+      id="comment-ca-marche"
+      className="relative overflow-hidden border-t border-line bg-console px-6 py-20 sm:px-10"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px] opacity-70"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 100% at 50% 0%, rgba(227,165,72,0.1), transparent 70%)",
+        }}
+      />
+      <div className="relative mx-auto max-w-3xl text-center">
         <Reveal>
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-teal">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-amber">
             Comment ça marche
           </p>
           <h2 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-paper sm:text-5xl">

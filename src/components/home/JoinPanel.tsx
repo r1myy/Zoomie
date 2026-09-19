@@ -49,7 +49,7 @@ export function JoinPanel({ accountName }: { accountName?: string | null }) {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-md border border-line bg-panel p-5">
+    <div className="w-full max-w-sm rounded-md border border-line bg-panel-raised p-5">
       <div className="mb-4 flex gap-1 rounded-sm bg-console p-1">
         {(["create", "join"] as const).map((m) => (
           <button
