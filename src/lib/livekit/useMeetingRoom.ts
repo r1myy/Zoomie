@@ -278,6 +278,11 @@ export function useMeetingRoom({
           true,
           preferredAudio ? { deviceId: preferredAudio } : undefined
         );
+        // setXEnabled(true) ne déclenche pas TrackMuted/TrackUnmuted (ce sont
+        // des événements de mute, pas de publication) : sans ce patch, le
+        // bouton de la barre d'outils restait bloqué sur "coupé" alors que
+        // le micro était bel et bien actif.
+        patchTile(room.localParticipant.identity, { micEnabled: true });
       } catch {
         setError("Micro indisponible — vérifiez les autorisations du navigateur.");
       }
@@ -289,11 +294,10 @@ export function useMeetingRoom({
         const localVideoPub = room.localParticipant.videoTrackPublications
           .values()
           .next().value;
-        if (localVideoPub?.videoTrack) {
-          patchTile(room.localParticipant.identity, {
-            videoTrack: localVideoPub.videoTrack as LocalVideoTrack,
-          });
-        }
+        patchTile(room.localParticipant.identity, {
+          camEnabled: true,
+          videoTrack: (localVideoPub?.videoTrack as LocalVideoTrack) ?? undefined,
+        });
       } catch {
         setError((prev) => prev ?? "Caméra indisponible — vérifiez les autorisations du navigateur.");
       }
