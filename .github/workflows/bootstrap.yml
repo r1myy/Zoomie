@@ -1,0 +1,33 @@
+name: Bootstrap VPS
+
+# Déclenché manuellement, une seule fois (ou après une réinstallation du
+# serveur) — prépare le dossier et le cron des rappels. Voir
+# deploy/bootstrap.sh pour le détail.
+on:
+  workflow_dispatch:
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copier les fichiers de déploiement sur le VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "deploy/*"
+          target: "/var/www/zoomie"
+          strip_components: 0
+
+      - name: Exécuter le script de configuration initiale
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /var/www/zoomie/deploy/bootstrap.sh
+            CRON_SECRET="${{ secrets.CRON_SECRET }}" /var/www/zoomie/deploy/bootstrap.sh

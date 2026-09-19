@@ -1,91 +1,102 @@
 # Déploiement de Zoomie en production
 
-Trois pièces séparées à mettre en ligne : le serveur média LiveKit (SFU),
-l'app Next.js, et les services déjà hébergés (Supabase, Resend) à finaliser
-pour la production. Faites-les dans cet ordre — l'app a besoin de l'URL
-LiveKit finale pour ses variables d'environnement.
+Tout tourne sur le VPS Hostinger partagé (72.60.165.79, déjà utilisé pour
+CFA Impact, n8n, video.pixora.ca) derrière Traefik (déjà en place,
+résolveur ACME `mytlschallenge`, réseau Docker `root_default`). L'app
+Next.js et le serveur média LiveKit sont deux conteneurs Docker sur ce même
+réseau — `docker-compose.yml` à la racine du dépôt. Déploiement continu via
+GitHub Actions (`.github/workflows/deploy.yml`) : chaque push sur `main`
+reconstruit et redémarre les conteneurs sur le VPS.
 
-## 1. LiveKit (SFU auto-hébergé)
+## État actuel
 
-Voir [`livekit/production/README.md`](livekit/production/README.md) —
-stack Docker Compose (LiveKit + Caddy pour le HTTPS/WSS automatique + TURN
-intégré) à lancer sur un petit VPS (Hetzner, DigitalOcean, ~5-8 $/mois).
+- ✅ Secrets GitHub Actions configurés (`gh secret list --repo r1myy/Zoomie`) :
+  clés Supabase, clés LiveKit de production générées, clé API Resend,
+  `CRON_SECRET`, `VPS_HOST`, `VPS_SSH_KEY` (réutilise la clé de déploiement
+  déjà autorisée sur le VPS pour CFA Impact).
+- ✅ `/var/www/zoomie/livekit.yaml` créé sur le VPS avec une vraie paire
+  clé/secret LiveKit (pas `devkey`/`secret`).
+- ✅ Cron des rappels installé (`/etc/cron.d/zoomie-reminders`, toutes les
+  15 min, appelle `/api/reminders/run` en local sur le conteneur).
+- ⬜ **DNS à configurer** (bloquant — voir ci-dessous).
+- ⬜ **Domaine d'envoi Resend à vérifier** (sinon les invités réels ne
+  reçoivent pas les courriels — voir plus bas).
+- ⬜ Premier déploiement (se déclenche automatiquement au prochain
+  `git push` sur `main`, ou manuellement via `gh workflow run deploy.yml`).
 
-À la fin de cette étape, vous avez : une URL `wss://livekit.votredomaine.tld`
-et une paire clé/secret API LiveKit de production.
+## 1. DNS — à faire avant tout
 
-## 2. Supabase
+Ajoutez deux enregistrements A dans le DNS de `pixora.ca`, tous deux
+pointant vers `72.60.165.79` :
 
-- Migrations SQL à exécuter dans le SQL Editor du projet, dans l'ordre, si
-  ce n'est pas déjà fait : `supabase/schema.sql`, puis chaque fichier de
-  `supabase/migrations/` par ordre numérique.
-- **Authentication → URL Configuration** : mettez à jour le "Site URL" et
-  ajoutez votre domaine de production aux "Redirect URLs" (sinon les liens
-  de confirmation par courriel de l'inscription renverront vers localhost).
-- Les clés (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`) restent les mêmes qu'en dev — c'est le même
-  projet Supabase, pas besoin d'en créer un nouveau.
+| Nom                        | Type | Valeur          |
+| --------------------------- | ---- | --------------- |
+| `meet.pixora.ca`            | A    | `72.60.165.79`  |
+| `livekit-meet.pixora.ca`    | A    | `72.60.165.79`  |
 
-## 3. Resend — vérifier un domaine d'envoi
+Traefik obtient automatiquement un certificat Let's Encrypt pour chaque
+domaine à la première requête HTTPS reçue — mais seulement une fois que le
+DNS résout correctement. Comptez quelques minutes à quelques heures selon
+votre registraire.
 
-Actuellement configuré avec l'adresse `onboarding@resend.dev`, un domaine de
-test Resend qui **ne peut livrer qu'à l'adresse courriel de votre propre
-compte Resend** — pas aux vrais invités d'une réunion planifiée. Pour la
-production :
+## 2. Domaine d'envoi Resend (avant que de vrais invités reçoivent des courriels)
 
-1. Dashboard Resend → **Domains** → **Add Domain**, entrez un domaine ou
-   sous-domaine que vous contrôlez (ex. `mail.votredomaine.tld`).
-2. Ajoutez les enregistrements DNS (SPF/DKIM) qu'affiche Resend chez votre
-   registraire, attendez la vérification (quelques minutes à quelques heures).
-3. Une fois vérifié, définissez la variable d'environnement
-   `RESEND_FROM_ADDRESS=Zoomie <reunions@mail.votredomaine.tld>`.
+Actuellement configuré avec l'adresse de test `onboarding@resend.dev`, qui
+**ne peut livrer qu'à l'adresse courriel de votre propre compte Resend** —
+pas aux vrais invités d'une réunion planifiée.
 
-Tant que ce n'est pas fait, la planification de réunions continue de
-fonctionner, mais les courriels aux invités échoueront silencieusement (voir
-`src/app/api/schedule/route.ts` — un échec d'envoi individuel n'annule pas
-la création de la réunion).
+1. Dashboard Resend → **Domains** → **Add Domain** (ex. `mail.pixora.ca`).
+2. Ajoutez les enregistrements DNS (SPF/DKIM) qu'affiche Resend.
+3. Une fois vérifié :
+   ```bash
+   gh secret set RESEND_FROM_ADDRESS --repo r1myy/Zoomie --body "Zoomie <reunions@mail.pixora.ca>"
+   ```
+   Puis redéployez (`gh workflow run deploy.yml --repo r1myy/Zoomie`).
 
-## 4. Déployer l'app Next.js (Vercel recommandé)
+## 3. Premier déploiement
 
-Vercel est le chemin le plus direct pour une app Next.js (zéro config,
-HTTPS automatique, aperçus de déploiement par PR) :
+Une fois le DNS propagé, déclenchez le déploiement :
 
-1. https://vercel.com → **Add New Project** → importez le dépôt GitHub
-   `r1myy/Zoomie`.
-2. Dans **Environment Variables**, ajoutez toutes les valeurs de
-   `.env.local` (voir `.env.local.example` pour la liste complète) :
-   `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `LIVEKIT_URL` (l'URL HTTPS de
-   l'étape 1), `NEXT_PUBLIC_LIVEKIT_WS_URL` (l'URL `wss://` de l'étape 1),
-   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `RESEND_FROM_ADDRESS`
-   (une fois le domaine vérifié), `CRON_SECRET` (une valeur aléatoire, ex.
-   `openssl rand -hex 24`).
-3. **Deploy**. Build par défaut (`next build`) — aucune configuration
-   supplémentaire nécessaire.
-4. Domaine personnalisé (optionnel) : **Settings → Domains** dans Vercel,
-   suivez les instructions DNS affichées.
+```bash
+gh workflow run deploy.yml --repo r1myy/Zoomie
+```
 
-## 5. Rappels planifiés (cron externe)
+(Ou attendez simplement le prochain `git push` sur `main` — le workflow se
+déclenche automatiquement.) Suivez sa progression :
 
-`/api/reminders/run` doit être appelée périodiquement — rien ne la
-déclenche automatiquement (voir le commentaire dans
-`src/app/api/reminders/run/route.ts`). Un service de cron externe gratuit
-convient, ex. [cron-job.org](https://cron-job.org) :
+```bash
+gh run watch --repo r1myy/Zoomie
+```
 
-1. Créez une tâche : URL `https://votredomaine.tld/api/reminders/run`,
-   méthode **POST**, fréquence toutes les 15-30 minutes.
-2. Ajoutez l'en-tête `Authorization: Bearer <CRON_SECRET>` (même valeur que
-   la variable d'environnement Vercel).
-3. Vérifiez la réponse `{"checked": N, "sent": N}` (HTTP 200) après le
-   premier déclenchement.
+## 4. Vérification
 
-## 6. Vérification finale
-
+- `https://meet.pixora.ca` charge la page d'accueil Zoomie avec un
+  certificat valide.
+- `https://livekit-meet.pixora.ca` répond (même une erreur HTTP de LiveKit
+  suffit à confirmer que Traefik relaie correctement).
 - Créer un compte, se connecter, planifier une réunion avec un invité réel
-  → courriel d'invitation bien reçu (domaine Resend vérifié).
+  → courriel d'invitation bien reçu (une fois le domaine Resend vérifié).
 - Rejoindre une réunion à deux depuis deux réseaux différents (ex. wifi +
-  partage de connexion 4G) → connexion établie, audio/vidéo fonctionnels
-  (confirme que le TURN LiveKit fonctionne, pas seulement la connexion
-  directe qui marcherait même sans TURN correctement configuré).
-- Lien de confirmation d'inscription par courriel pointe vers le bon
-  domaine de production, pas localhost.
+  partage de connexion 4G) → audio/vidéo fonctionnels (confirme que le TURN
+  LiveKit fonctionne réellement, pas seulement la connexion directe).
+- `docker compose logs -f zoomie-livekit` sur le VPS ne montre pas
+  d'erreurs de connexion au démarrage.
+
+## Notes
+
+- **Pare-feu Hostinger** : `ufw` est inactif sur ce VPS (rien à ouvrir côté
+  Linux), mais si le panneau Hostinger a son propre pare-feu cloud, assurez-
+  vous que les ports suivants sont ouverts : `80`, `443` (déjà utilisés par
+  Traefik pour les autres sites), `7881/tcp`, `3478/udp`,
+  `50000-60000/udp` (LiveKit, nouveaux).
+- **Réutilisation du VPS** : `docker-compose.yml` ne touche que les
+  conteneurs `zoomie` et `zoomie-livekit`, sur le réseau `root_default`
+  existant — rien de la configuration CFA Impact/n8n/Traefik n'est modifié.
+- **Ressources** : VPS à 3.8 Go de RAM, ~2.5 Go disponibles avant ce
+  déploiement — LiveKit et le conteneur Next.js standalone sont légers,
+  marge confortable pour l'usage actuel.
+- **Mise à jour manuelle si besoin** (dépannage) :
+  ```bash
+  ssh root@72.60.165.79
+  cd /var/www/zoomie && docker compose up -d --build
+  ```

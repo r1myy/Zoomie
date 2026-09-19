@@ -1,0 +1,25 @@
+# Copiez ce fichier en livekit.yaml sur le VPS (/var/www/zoomie/livekit.yaml,
+# jamais commité — voir .gitignore) et remplissez la clé/secret générés.
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+  # Indispensable en VPS cloud : LiveKit doit annoncer l'IP publique de la
+  # machine dans les candidats ICE, pas son IP privée interne.
+  use_external_ip: true
+
+# Serveur TURN intégré (pas de conteneur coturn séparé) — indispensable pour
+# les participants derrière un NAT/pare-feu strict qui bloque les flux UDP
+# directs. Écoute en UDP sur 3478, couvre la grande majorité des réseaux.
+turn:
+  enabled: true
+  udp_port: 3478
+
+keys:
+  # Générez une vraie paire avec :
+  #   docker run --rm livekit/livekit-server generate-keys
+  # Ne réutilisez jamais devkey/secret (valeurs de dev) en production.
+  APIVOTRECLEIC: votre-secret-genere-ici

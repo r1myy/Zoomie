@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Image de production légère (déploiement Docker derrière Traefik).
+  output: "standalone",
 };
 
 export default nextConfig;

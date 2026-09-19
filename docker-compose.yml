@@ -1,0 +1,62 @@
+# Déploiement de production sur le VPS partagé (Traefik déjà en place,
+# réseau `root_default`, résolveur ACME `mytlschallenge` — voir DEPLOY.md).
+# `zoomie` (Next.js) est routé par Traefik comme n'importe quel autre
+# service du VPS. `zoomie-livekit` l'est aussi pour sa signalisation HTTP/WS
+# (port 7880, interne au réseau Docker) ; ses ports média WebRTC (TCP 7881,
+# UDP 3478 pour le TURN, UDP 50000-60000) sont en revanche publiés
+# directement sur l'hôte car Traefik ne relaie pas l'UDP.
+services:
+  zoomie:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_LIVEKIT_WS_URL: ${NEXT_PUBLIC_LIVEKIT_WS_URL}
+    container_name: zoomie
+    restart: unless-stopped
+    # Exposé uniquement en local pour le cron des rappels — le trafic public
+    # passe exclusivement par Traefik (root-traefik-1, déjà sur 80/443).
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - LIVEKIT_URL=${LIVEKIT_URL}
+      - NEXT_PUBLIC_LIVEKIT_WS_URL=${NEXT_PUBLIC_LIVEKIT_WS_URL}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_FROM_ADDRESS=${RESEND_FROM_ADDRESS}
+      - CRON_SECRET=${CRON_SECRET}
+    networks:
+      - root_default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zoomie.rule=Host(`meet.pixora.ca`)"
+      - "traefik.http.routers.zoomie.entrypoints=websecure"
+      - "traefik.http.routers.zoomie.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.zoomie.loadbalancer.server.port=3000"
+
+  zoomie-livekit:
+    image: livekit/livekit-server:latest
+    container_name: zoomie-livekit
+    restart: unless-stopped
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7881:7881/tcp"
+      - "3478:3478/udp"
+      - "50000-60000:50000-60000/udp"
+    networks:
+      - root_default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zoomie-livekit.rule=Host(`livekit-meet.pixora.ca`)"
+      - "traefik.http.routers.zoomie-livekit.entrypoints=websecure"
+      - "traefik.http.routers.zoomie-livekit.tls.certresolver=mytlschallenge"
+      - "traefik.http.services.zoomie-livekit.loadbalancer.server.port=7880"
+
+networks:
+  root_default:
+    external: true
