@@ -38,11 +38,13 @@ export function Toolbar({
   sharing,
   chatOpen,
   participantsOpen,
+  devicesOpen,
   onToggleMic,
   onToggleCam,
   onToggleShare,
   onToggleChat,
   onToggleParticipants,
+  onToggleDevices,
   onLeave,
 }: {
   micOn: boolean;
@@ -50,11 +52,13 @@ export function Toolbar({
   sharing: boolean;
   chatOpen: boolean;
   participantsOpen: boolean;
+  devicesOpen: boolean;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onToggleShare: () => void;
   onToggleChat: () => void;
   onToggleParticipants: () => void;
+  onToggleDevices: () => void;
   onLeave: () => void;
 }) {
   return (
@@ -73,6 +77,9 @@ export function Toolbar({
       </ToolbarButton>
       <ToolbarButton label="Participants" active={participantsOpen} onClick={onToggleParticipants}>
         👥
+      </ToolbarButton>
+      <ToolbarButton label="Microphone et caméra" active={devicesOpen} onClick={onToggleDevices}>
+        ⚙️
       </ToolbarButton>
       <ToolbarButton label="Quitter la réunion" danger onClick={onLeave}>
         ⏻

@@ -15,6 +15,12 @@ import {
 } from "livekit-client";
 import { MixerEngine } from "@/lib/audio/mixerEngine";
 import { getStoredVolume, setStoredVolume } from "@/lib/audio/volumePrefs";
+import {
+  getPreferredAudioDevice,
+  getPreferredVideoDevice,
+  setPreferredAudioDevice,
+  setPreferredVideoDevice,
+} from "@/lib/media/devicePrefs";
 
 export interface TileState {
   identity: string;
@@ -217,13 +223,22 @@ export function useMeetingRoom({
       // L'accès caméra/micro peut échouer indépendamment de la connexion à la
       // salle (périphérique absent, permission refusée) — ça ne doit pas
       // empêcher de rejoindre en mode audio/vidéo dégradé.
+      const preferredAudio = getPreferredAudioDevice();
+      const preferredVideo = getPreferredVideoDevice();
+
       try {
-        await room.localParticipant.setMicrophoneEnabled(true);
+        await room.localParticipant.setMicrophoneEnabled(
+          true,
+          preferredAudio ? { deviceId: preferredAudio } : undefined
+        );
       } catch {
         setError("Micro indisponible — vérifiez les autorisations du navigateur.");
       }
       try {
-        await room.localParticipant.setCameraEnabled(true);
+        await room.localParticipant.setCameraEnabled(
+          true,
+          preferredVideo ? { deviceId: preferredVideo } : undefined
+        );
         const localVideoPub = room.localParticipant.videoTrackPublications
           .values()
           .next().value;
@@ -328,6 +343,17 @@ export function useMeetingRoom({
       videoTrack: (pub?.videoTrack as LocalVideoTrack) ?? undefined,
     });
   }, [patchTile]);
+
+  const switchDevice = useCallback(
+    async (kind: "audioinput" | "videoinput", deviceId: string) => {
+      const room = roomRef.current;
+      if (!room) return;
+      await room.switchActiveDevice(kind, deviceId);
+      if (kind === "audioinput") setPreferredAudioDevice(deviceId);
+      else setPreferredVideoDevice(deviceId);
+    },
+    []
+  );
 
   const toggleScreenShare = useCallback(async () => {
     const room = roomRef.current;
@@ -462,6 +488,7 @@ export function useMeetingRoom({
     getLevel,
     toggleMic,
     toggleCam,
+    switchDevice,
     toggleScreenShare,
     sendChat,
     hostMuteParticipant,

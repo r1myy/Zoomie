@@ -7,6 +7,7 @@ import { ParticipantTile } from "@/components/meeting/ParticipantTile";
 import { Toolbar } from "@/components/meeting/Toolbar";
 import { ChatPanel } from "@/components/meeting/ChatPanel";
 import { HostPanel } from "@/components/meeting/HostPanel";
+import { DeviceSettings } from "@/components/meeting/DeviceSettings";
 
 interface TokenResponse {
   token: string;
@@ -28,7 +29,7 @@ export default function MeetingRoomPage() {
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [waitingRequestId, setWaitingRequestId] = useState<string | null>(null);
-  const [sidePanel, setSidePanel] = useState<"chat" | "participants" | null>(null);
+  const [sidePanel, setSidePanel] = useState<"chat" | "participants" | "devices" | null>(null);
   const requestedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -241,6 +242,11 @@ export default function MeetingRoomPage() {
             />
           </div>
         )}
+        {sidePanel === "devices" && (
+          <div className="w-full shrink-0 sm:w-72">
+            <DeviceSettings onSwitchDevice={meeting.switchDevice} />
+          </div>
+        )}
       </div>
 
       <Toolbar
@@ -249,11 +255,13 @@ export default function MeetingRoomPage() {
         sharing={meeting.screenShareBy === session.identity}
         chatOpen={sidePanel === "chat"}
         participantsOpen={sidePanel === "participants"}
+        devicesOpen={sidePanel === "devices"}
         onToggleMic={meeting.toggleMic}
         onToggleCam={meeting.toggleCam}
         onToggleShare={meeting.toggleScreenShare}
         onToggleChat={() => setSidePanel((v) => (v === "chat" ? null : "chat"))}
         onToggleParticipants={() => setSidePanel((v) => (v === "participants" ? null : "participants"))}
+        onToggleDevices={() => setSidePanel((v) => (v === "devices" ? null : "devices"))}
         onLeave={() => {
           meeting.leave();
           router.push("/");

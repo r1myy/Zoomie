@@ -23,7 +23,9 @@ export function AccountBadge({ name }: { name: string | null }) {
 
   return (
     <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-[0.15em] text-dust">
-      <span className="text-paper">{name}</span>
+      <Link href="/account" className="text-paper hover:underline">
+        {name}
+      </Link>
       <span className="text-dust-dim">·</span>
       <Link href="/history" className="hover:text-paper">
         Mes réunions
