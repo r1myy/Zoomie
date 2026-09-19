@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { generateRoomCode, isValidRoomCode } from "@/lib/roomCode";
@@ -10,7 +11,9 @@ export function JoinPanel({ accountName }: { accountName?: string | null }) {
   const router = useRouter();
   const search = useSearchParams();
   const invitedCode = search.get("join")?.toUpperCase() ?? "";
-  const [mode, setMode] = useState<"create" | "join">(invitedCode ? "join" : "create");
+  const [mode, setMode] = useState<"create" | "join" | "schedule">(
+    invitedCode ? "join" : "create"
+  );
   const [name, setName] = useState(accountName ?? "");
   const [code, setCode] = useState(invitedCode);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export function JoinPanel({ accountName }: { accountName?: string | null }) {
   return (
     <div className="w-full max-w-sm rounded-md border border-line bg-panel-raised p-5">
       <div className="mb-4 flex gap-1 rounded-sm bg-console p-1">
-        {(["create", "join"] as const).map((m) => (
+        {(["create", "join", "schedule"] as const).map((m) => (
           <button
             key={m}
             type="button"
@@ -59,15 +62,29 @@ export function JoinPanel({ accountName }: { accountName?: string | null }) {
               setMode(m);
               setError(null);
             }}
-            className={`flex-1 rounded-sm py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 rounded-sm py-2 text-xs font-medium transition-colors sm:text-sm ${
               mode === m ? "bg-panel-raised text-paper" : "text-dust hover:text-paper"
             }`}
           >
-            {m === "create" ? "Créer une réunion" : "Rejoindre"}
+            {m === "create" ? "Créer" : m === "join" ? "Rejoindre" : "Planifier"}
           </button>
         ))}
       </div>
 
+      {mode === "schedule" ? (
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-dust">
+            Fixez une date, invitez par courriel — chacun reçoit une invitation, puis un rappel
+            avant le début.
+          </p>
+          <Link
+            href="/schedule"
+            className="block w-full rounded-sm bg-amber px-4 py-2.5 text-center text-sm font-semibold text-console transition-colors hover:bg-amber-dim"
+          >
+            Planifier une réunion
+          </Link>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-xs font-medium text-dust">Votre nom</span>
@@ -100,6 +117,7 @@ export function JoinPanel({ accountName }: { accountName?: string | null }) {
           {mode === "create" ? "Créer et rejoindre" : "Rejoindre la salle"}
         </button>
       </form>
+      )}
     </div>
   );
 }

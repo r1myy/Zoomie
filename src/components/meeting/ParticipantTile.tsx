@@ -33,7 +33,15 @@ export function ParticipantTile({
           {tile.name.split("#")[0]}
           {tile.isLocal && " (vous)"}
         </div>
-        {!tile.camEnabled && (
+        {!tile.camEnabled && tile.avatarUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- avatar hébergé sur Supabase Storage, pas dans le domaine optimisé par next/image
+          <img
+            src={tile.avatarUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
+        {!tile.camEnabled && !tile.avatarUrl && (
           <div className="absolute inset-0 flex items-center justify-center bg-console text-4xl font-display text-dust-dim">
             {tile.name.slice(0, 1).toUpperCase()}
           </div>

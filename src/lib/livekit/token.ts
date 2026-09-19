@@ -10,11 +10,13 @@ export async function createRoomToken({
   identity,
   displayName,
   canPublish = true,
+  metadata,
 }: {
   roomCode: string;
   identity: string;
   displayName: string;
   canPublish?: boolean;
+  metadata?: string;
 }) {
   const apiKey = process.env.LIVEKIT_API_KEY;
   const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -28,6 +30,7 @@ export async function createRoomToken({
     identity,
     name: displayName,
     ttl: "4h",
+    metadata,
   });
   at.addGrant({
     room: roomCode,

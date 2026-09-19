@@ -42,12 +42,15 @@ export async function POST(
     // Si l'hôte a déjà une session active (ex. un autre onglet, même compte),
     // on ne lui reprend pas la main en dessous des pieds pour ce nouvel
     // arrivant — il rejoint comme un participant normal à la place.
+    const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+    const metadata = avatarUrl ? JSON.stringify({ avatarUrl }) : undefined;
+
     const currentHostStillConnected = await isParticipantConnected(roomCode, room.hostIdentity);
     const reclaimed = currentHostStillConnected
       ? undefined
       : await reclaimRoomIfOwner(roomCode, identity, user?.id);
     if (reclaimed) {
-      const token = await createRoomToken({ roomCode, identity, displayName });
+      const token = await createRoomToken({ roomCode, identity, displayName, metadata });
       return NextResponse.json({
         status: "admitted",
         token,
@@ -64,7 +67,7 @@ export async function POST(
     }
 
     if (!room.waitingRoomEnabled) {
-      const token = await createRoomToken({ roomCode, identity, displayName });
+      const token = await createRoomToken({ roomCode, identity, displayName, metadata });
       return NextResponse.json({
         status: "admitted",
         token,

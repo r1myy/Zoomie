@@ -23,12 +23,13 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
+    const session = await createSessionClient();
+    const {
+      data: { user },
+    } = await session.auth.getUser();
+
     let hostUserId: string | null = null;
     if (wantsHost && !existing) {
-      const session = await createSessionClient();
-      const {
-        data: { user },
-      } = await session.auth.getUser();
       hostUserId = user?.id ?? null;
     }
     const room = await getOrCreateRoom(roomCode, wantsHost ? identity : undefined, hostUserId);
@@ -37,7 +38,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
     }
 
-    const token = await createRoomToken({ roomCode, identity, displayName });
+    const avatarUrl = user?.user_metadata?.avatar_url as string | undefined;
+    const token = await createRoomToken({
+      roomCode,
+      identity,
+      displayName,
+      metadata: avatarUrl ? JSON.stringify({ avatarUrl }) : undefined,
+    });
     return NextResponse.json({
       token,
       identity,

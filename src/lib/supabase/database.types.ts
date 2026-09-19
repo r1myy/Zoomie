@@ -13,6 +13,8 @@ export type RoomRow = {
   host_user_id: string | null;
   locked: boolean;
   waiting_room_enabled: boolean;
+  title: string | null;
+  scheduled_at: string | null;
   created_at: string;
 };
 
@@ -23,6 +25,15 @@ export type JoinRequestRow = {
   display_name: string;
   status: "pending" | "admitted" | "denied";
   token: string | null;
+  created_at: string;
+};
+
+export type MeetingInviteeRow = {
+  id: string;
+  room_code: string;
+  email: string;
+  invited_at: string | null;
+  reminder_sent_at: string | null;
   created_at: string;
 };
 
@@ -40,6 +51,12 @@ export type Database = {
         Insert: Partial<JoinRequestRow> &
           Pick<JoinRequestRow, "id" | "room_code" | "identity" | "display_name">;
         Update: Partial<JoinRequestRow>;
+        Relationships: [];
+      };
+      meeting_invitees: {
+        Row: MeetingInviteeRow;
+        Insert: Partial<MeetingInviteeRow> & Pick<MeetingInviteeRow, "room_code" | "email">;
+        Update: Partial<MeetingInviteeRow>;
         Relationships: [];
       };
     };

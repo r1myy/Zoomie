@@ -36,6 +36,17 @@ export interface TileState {
   muted: boolean;
   handRaised: boolean;
   reaction: { emoji: string; id: number } | null;
+  avatarUrl?: string;
+}
+
+function avatarFromMetadata(metadata: string | undefined): string | undefined {
+  if (!metadata) return undefined;
+  try {
+    const parsed = JSON.parse(metadata) as { avatarUrl?: string };
+    return parsed.avatarUrl;
+  } catch {
+    return undefined;
+  }
 }
 
 export type LeftMeetingReason = "left" | "ended" | "removed" | "disconnected";
@@ -66,6 +77,7 @@ function tileFromParticipant(p: Participant, isLocal: boolean): TileState {
     muted: stored.muted,
     handRaised: false,
     reaction: null,
+    avatarUrl: avatarFromMetadata(p.metadata),
   };
 }
 

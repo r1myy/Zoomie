@@ -7,11 +7,15 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function AccountPage() {
   const router = useRouter();
+  const [userId, setUserId] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -21,12 +25,58 @@ export default function AccountPage() {
         router.replace("/login");
         return;
       }
+      setUserId(user.id);
       setName((user.user_metadata?.full_name as string | undefined) ?? "");
       setEmail(user.email ?? "");
+      setAvatarUrl((user.user_metadata?.avatar_url as string | undefined) ?? null);
       setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setAvatarError("Choisissez une image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError("Image trop lourde (2 Mo max).");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setAvatarError(null);
+    try {
+      const supabase = createClient();
+      const ext = file.name.split(".").pop() || "jpg";
+      const path = `${userId}/avatar.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(path, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(path);
+      // L'horodatage évite que le navigateur (ou les participants d'une
+      // réunion déjà rejointe) continue d'afficher l'ancien avatar en cache
+      // à la même URL après un remplacement.
+      const bustedUrl = `${publicUrl.publicUrl}?v=${Date.now()}`;
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: { avatar_url: bustedUrl },
+      });
+      if (updateError) throw updateError;
+
+      setAvatarUrl(bustedUrl);
+      router.refresh();
+    } catch (err) {
+      setAvatarError(err instanceof Error ? err.message : "Téléversement impossible.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -60,6 +110,32 @@ export default function AccountPage() {
           <Link href="/" className="text-xs text-dust hover:text-paper">
             Retour
           </Link>
+        </div>
+
+        <div className="mb-5 flex items-center gap-4">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border border-line bg-console">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element -- avatar hébergé sur Supabase Storage
+              <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center font-display text-xl text-dust-dim">
+                {(name || email).slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="cursor-pointer text-xs font-medium text-teal hover:underline">
+              {uploadingAvatar ? "Téléversement…" : "Changer la photo"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                disabled={uploadingAvatar}
+                className="hidden"
+              />
+            </label>
+            {avatarError && <p className="mt-1 text-xs text-danger">{avatarError}</p>}
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">

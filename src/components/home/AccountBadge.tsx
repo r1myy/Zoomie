@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export function AccountBadge({ name }: { name: string | null }) {
+export function AccountBadge({
+  name,
+  avatarUrl,
+}: {
+  name: string | null;
+  avatarUrl?: string | null;
+}) {
   const router = useRouter();
 
   if (!name) {
@@ -23,8 +29,16 @@ export function AccountBadge({ name }: { name: string | null }) {
 
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-[0.15em] text-dust">
-      <Link href="/account" className="max-w-[9rem] truncate text-paper hover:underline">
-        {name}
+      <Link href="/account" className="flex items-center gap-2 text-paper hover:underline">
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- avatar hébergé sur Supabase Storage
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-5 w-5 shrink-0 rounded-full border border-line object-cover"
+          />
+        ) : null}
+        <span className="max-w-[9rem] truncate">{name}</span>
       </Link>
       <span className="text-dust-dim">·</span>
       <Link href="/history" className="hover:text-paper">

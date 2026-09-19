@@ -5,7 +5,7 @@
 // verrouillée…) est géré applicativement ici, pas par des policies RLS.
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { JoinRequestRow, RoomRow } from "@/lib/supabase/database.types";
+import type { JoinRequestRow, MeetingInviteeRow, RoomRow } from "@/lib/supabase/database.types";
 
 export interface RoomRecord {
   code: string;
@@ -13,6 +13,17 @@ export interface RoomRecord {
   hostUserId: string | null;
   locked: boolean;
   waitingRoomEnabled: boolean;
+  title: string | null;
+  scheduledAt: number | null;
+  createdAt: number;
+}
+
+export interface MeetingInvitee {
+  id: string;
+  roomCode: string;
+  email: string;
+  invitedAt: number | null;
+  reminderSentAt: number | null;
   createdAt: number;
 }
 
@@ -35,6 +46,19 @@ function fromRoomRow(row: RoomRow): RoomRecord {
     hostUserId: row.host_user_id,
     locked: row.locked,
     waitingRoomEnabled: row.waiting_room_enabled,
+    title: row.title,
+    scheduledAt: row.scheduled_at ? new Date(row.scheduled_at).getTime() : null,
+    createdAt: new Date(row.created_at).getTime(),
+  };
+}
+
+function fromInviteeRow(row: MeetingInviteeRow): MeetingInvitee {
+  return {
+    id: row.id,
+    roomCode: row.room_code,
+    email: row.email,
+    invitedAt: row.invited_at ? new Date(row.invited_at).getTime() : null,
+    reminderSentAt: row.reminder_sent_at ? new Date(row.reminder_sent_at).getTime() : null,
     createdAt: new Date(row.created_at).getTime(),
   };
 }
@@ -157,6 +181,88 @@ export async function listPendingJoinRequests(roomCode: string): Promise<JoinReq
     .order("created_at", { ascending: true });
   if (error) throw new Error(`Lecture de la salle d'attente impossible : ${error.message}`);
   return (data as JoinRequestRow[]).map(fromJoinRequestRow);
+}
+
+// Crée une salle planifiée (titre + date/heure), pas encore rejointe par
+// personne : host_identity reste vide et sera fixée par reclaimRoomIfOwner
+// dès que l'hôte rejoint réellement (via /api/rooms/[code]/join-request,
+// puisque l'hôte d'une réunion planifiée passe par le même chemin qu'un
+// participant, identifié par host_user_id plutôt que par host=1).
+export async function createScheduledRoom({
+  code,
+  hostUserId,
+  title,
+  scheduledAt,
+}: {
+  code: string;
+  hostUserId: string;
+  title: string;
+  scheduledAt: number;
+}): Promise<RoomRecord> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("rooms")
+    .insert({
+      code,
+      host_identity: "",
+      host_user_id: hostUserId,
+      title,
+      scheduled_at: new Date(scheduledAt).toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw new Error(`Impossible de planifier la réunion : ${error.message}`);
+  return fromRoomRow(data as RoomRow);
+}
+
+export async function addInvitees(roomCode: string, emails: string[]): Promise<MeetingInvitee[]> {
+  const db = createAdminClient();
+  const rows = emails.map((email) => ({ room_code: roomCode, email }));
+  const { data, error } = await db.from("meeting_invitees").insert(rows).select();
+  if (error) throw new Error(`Impossible d'ajouter les invités : ${error.message}`);
+  return (data as MeetingInviteeRow[]).map(fromInviteeRow);
+}
+
+export async function markInviteesInvited(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = createAdminClient();
+  await db
+    .from("meeting_invitees")
+    .update({ invited_at: new Date().toISOString() })
+    .in("id", ids);
+}
+
+export async function markReminderSent(id: string): Promise<void> {
+  const db = createAdminClient();
+  await db.from("meeting_invitees").update({ reminder_sent_at: new Date().toISOString() }).eq("id", id);
+}
+
+// Invités dont la réunion est planifiée entre `now` et `now + windowMs`, et
+// qui n'ont pas encore reçu de rappel. Destiné à /api/reminders/run,
+// déclenché périodiquement par une tâche planifiée externe (pas de cron
+// intégré tant que l'app n'est pas déployée).
+export async function getDueReminders(
+  now: number,
+  windowMs: number
+): Promise<{ invitee: MeetingInvitee; room: RoomRecord }[]> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("rooms")
+    .select("*, meeting_invitees(*)")
+    .not("scheduled_at", "is", null)
+    .gte("scheduled_at", new Date(now).toISOString())
+    .lte("scheduled_at", new Date(now + windowMs).toISOString());
+  if (error) throw new Error(`Lecture des rappels dus impossible : ${error.message}`);
+
+  const due: { invitee: MeetingInvitee; room: RoomRecord }[] = [];
+  for (const row of data as (RoomRow & { meeting_invitees: MeetingInviteeRow[] })[]) {
+    const room = fromRoomRow(row);
+    for (const inviteeRow of row.meeting_invitees ?? []) {
+      if (inviteeRow.reminder_sent_at) continue;
+      due.push({ invitee: fromInviteeRow(inviteeRow), room });
+    }
+  }
+  return due;
 }
 
 export async function setJoinRequestDecision(

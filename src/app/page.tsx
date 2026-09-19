@@ -16,6 +16,7 @@ export default async function Home() {
   } = await supabase.auth.getUser();
   const accountName =
     (user?.user_metadata?.full_name as string | undefined)?.trim() || user?.email || null;
+  const avatarUrl = (user?.user_metadata?.avatar_url as string | undefined) ?? null;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -34,7 +35,7 @@ export default async function Home() {
             Cas d&apos;usage
           </a>
         </nav>
-        <AccountBadge name={accountName} />
+        <AccountBadge name={accountName} avatarUrl={avatarUrl} />
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center gap-12 px-6 py-16 sm:flex-row sm:items-center sm:gap-16 sm:py-20">
