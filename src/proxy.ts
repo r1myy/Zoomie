@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 // Rafraîchit la session Supabase (tokens dans les cookies) à chaque requête,
 // pour que les Server Components voient toujours un état de connexion à jour.
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {

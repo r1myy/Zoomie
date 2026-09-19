@@ -1,0 +1,22 @@
+services:
+  # network_mode: host — LiveKit a besoin d'une large plage de ports UDP pour
+  # les flux média (port_range_start/end dans livekit.yaml) : publier chaque
+  # port individuellement en mode bridge Docker n'est pas praticable.
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

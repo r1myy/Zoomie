@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# secrets LiveKit de production (clé/secret réels) — seul livekit.yaml.example est commité
+livekit/production/livekit.yaml
+
 # vercel
 .vercel
 
