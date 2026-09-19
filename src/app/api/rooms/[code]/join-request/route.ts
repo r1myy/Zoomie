@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRoomToken, makeIdentity } from "@/lib/livekit/token";
-import { createJoinRequest, getRoom } from "@/lib/rooms/store";
+import { getRoom, createJoinRequest, reclaimRoomIfOwner } from "@/lib/rooms/store";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
 
-// Point d'entrée pour un participant (non-hôte) qui rejoint une salle. Si la
-// salle d'attente est désactivée, admet immédiatement (comme /api/token).
-// Si elle est activée, crée une demande en attente que l'hôte devra admettre
-// — voir /api/rooms/[code]/join-request/[requestId] pour le sondage du
-// statut et /api/rooms/[code]/host-actions (admit/deny) côté hôte.
+// Point d'entrée pour un participant qui rejoint une salle existante via son
+// code. Si la salle d'attente est désactivée, admet immédiatement (comme
+// /api/token). Si elle est activée, crée une demande en attente que l'hôte
+// devra admettre — voir /api/rooms/[code]/join-request/[requestId] pour le
+// sondage du statut et /api/rooms/[code]/host-actions (admit/deny) côté
+// hôte. Un compte propriétaire de la salle qui revient (nouvelle session,
+// donc nouvelle identité LiveKit) reprend automatiquement la main, sans
+// passer par le verrouillage ni la salle d'attente — voir
+// reclaimRoomIfOwner.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -25,11 +30,31 @@ export async function POST(
     if (!room) {
       return NextResponse.json({ error: "Cette salle n'existe pas ou plus." }, { status: 404 });
     }
+
+    const identity = makeIdentity(displayName);
+
+    const session = await createSessionClient();
+    const {
+      data: { user },
+    } = await session.auth.getUser();
+
+    const reclaimed = await reclaimRoomIfOwner(roomCode, identity, user?.id);
+    if (reclaimed) {
+      const token = await createRoomToken({ roomCode, identity, displayName });
+      return NextResponse.json({
+        status: "admitted",
+        token,
+        identity,
+        wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
+        locked: reclaimed.locked,
+        waitingRoomEnabled: reclaimed.waitingRoomEnabled,
+        isHost: true,
+      });
+    }
+
     if (room.locked) {
       return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });
     }
-
-    const identity = makeIdentity(displayName);
 
     if (!room.waitingRoomEnabled) {
       const token = await createRoomToken({ roomCode, identity, displayName });
@@ -39,6 +64,8 @@ export async function POST(
         identity,
         wsUrl: process.env.NEXT_PUBLIC_LIVEKIT_WS_URL,
         locked: room.locked,
+        waitingRoomEnabled: room.waitingRoomEnabled,
+        isHost: false,
       });
     }
 

@@ -25,6 +25,10 @@ export function AccountBadge({ name }: { name: string | null }) {
     <div className="flex items-center gap-3 font-mono text-xs uppercase tracking-[0.15em] text-dust">
       <span className="text-paper">{name}</span>
       <span className="text-dust-dim">·</span>
+      <Link href="/history" className="hover:text-paper">
+        Mes réunions
+      </Link>
+      <span className="text-dust-dim">·</span>
       <button
         type="button"
         onClick={async () => {

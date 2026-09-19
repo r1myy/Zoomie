@@ -10,6 +10,7 @@
 export type RoomRow = {
   code: string;
   host_identity: string;
+  host_user_id: string | null;
   locked: boolean;
   waiting_room_enabled: boolean;
   created_at: string;

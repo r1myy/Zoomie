@@ -10,6 +10,7 @@ import type { JoinRequestRow, RoomRow } from "@/lib/supabase/database.types";
 export interface RoomRecord {
   code: string;
   hostIdentity: string;
+  hostUserId: string | null;
   locked: boolean;
   waitingRoomEnabled: boolean;
   createdAt: number;
@@ -31,6 +32,7 @@ function fromRoomRow(row: RoomRow): RoomRecord {
   return {
     code: row.code,
     hostIdentity: row.host_identity,
+    hostUserId: row.host_user_id,
     locked: row.locked,
     waitingRoomEnabled: row.waiting_room_enabled,
     createdAt: new Date(row.created_at).getTime(),
@@ -51,7 +53,8 @@ function fromJoinRequestRow(row: JoinRequestRow): JoinRequest {
 
 export async function getOrCreateRoom(
   code: string,
-  claimHostIdentity?: string
+  claimHostIdentity?: string,
+  hostUserId?: string | null
 ): Promise<RoomRecord> {
   const db = createAdminClient();
 
@@ -60,7 +63,7 @@ export async function getOrCreateRoom(
 
   const { data, error } = await db
     .from("rooms")
-    .insert({ code, host_identity: claimHostIdentity ?? "" })
+    .insert({ code, host_identity: claimHostIdentity ?? "", host_user_id: hostUserId ?? null })
     // Une autre requête a pu créer la salle entre-temps (double appel en
     // dev, course entre deux onglets) : on retombe alors sur celle-ci.
     .select()
@@ -72,6 +75,30 @@ export async function getOrCreateRoom(
     throw new Error(`Impossible de créer la salle : ${error.message}`);
   }
 
+  return fromRoomRow(data as RoomRow);
+}
+
+// Un hôte connecté qui revient plus tard (nouvelle session, donc nouvelle
+// identité LiveKit éphémère) reprend la main sur sa salle : on met à jour
+// host_identity pour qu'elle corresponde à sa session actuelle. Ne fait
+// rien si la salle n'a pas de propriétaire ou appartient à quelqu'un d'autre.
+export async function reclaimRoomIfOwner(
+  code: string,
+  identity: string,
+  userId: string | null | undefined
+): Promise<RoomRecord | undefined> {
+  if (!userId) return undefined;
+  const room = await getRoom(code);
+  if (!room || room.hostUserId !== userId) return undefined;
+
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("rooms")
+    .update({ host_identity: identity })
+    .eq("code", code)
+    .select()
+    .single();
+  if (error) throw new Error(`Impossible de reprendre la salle : ${error.message}`);
   return fromRoomRow(data as RoomRow);
 }
 

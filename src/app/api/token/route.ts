@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRoomToken, makeIdentity } from "@/lib/livekit/token";
 import { getOrCreateRoom, getRoom } from "@/lib/rooms/store";
+import { createClient as createSessionClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -22,7 +23,15 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-    const room = await getOrCreateRoom(roomCode, wantsHost ? identity : undefined);
+    let hostUserId: string | null = null;
+    if (wantsHost && !existing) {
+      const session = await createSessionClient();
+      const {
+        data: { user },
+      } = await session.auth.getUser();
+      hostUserId = user?.id ?? null;
+    }
+    const room = await getOrCreateRoom(roomCode, wantsHost ? identity : undefined, hostUserId);
 
     if (room.locked && room.hostIdentity !== identity) {
       return NextResponse.json({ error: "Cette salle est verrouillée par l'hôte." }, { status: 403 });

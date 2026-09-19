@@ -11,10 +11,18 @@
 create table if not exists public.rooms (
   code text primary key,
   host_identity text not null default '',
+  -- Compte propriétaire de la salle (nul pour une salle créée par un
+  -- invité sans compte). Permet de reconnaître un hôte qui revient plus
+  -- tard dans une nouvelle session (nouvelle identité LiveKit éphémère) et
+  -- alimente "Mes réunions" (historique, section 4.6 du cahier des
+  -- charges).
+  host_user_id uuid references auth.users (id) on delete set null,
   locked boolean not null default false,
   waiting_room_enabled boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create index if not exists rooms_host_user_id_idx on public.rooms (host_user_id);
 
 create table if not exists public.join_requests (
   id text primary key,
