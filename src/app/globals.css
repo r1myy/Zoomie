@@ -101,6 +101,31 @@ body::before {
   animation: reaction-float 2.2s ease-out forwards;
 }
 
+@keyframes signal-flow {
+  to {
+    stroke-dashoffset: -56;
+  }
+}
+
+.signal-flow {
+  animation: signal-flow 2.6s linear infinite;
+}
+
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-rise {
+  animation: hero-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
