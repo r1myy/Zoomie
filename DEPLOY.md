@@ -4,42 +4,65 @@ Tout tourne sur le VPS Hostinger partagé (72.60.165.79, déjà utilisé pour
 CFA Impact, n8n, video.pixora.ca) derrière Traefik (déjà en place,
 résolveur ACME `mytlschallenge`, réseau Docker `root_default`). L'app
 Next.js et le serveur média LiveKit sont deux conteneurs Docker sur ce même
-réseau — `docker-compose.yml` à la racine du dépôt. Déploiement continu via
-GitHub Actions (`.github/workflows/deploy.yml`) : chaque push sur `main`
-reconstruit et redémarre les conteneurs sur le VPS.
+réseau — `docker-compose.yml` à la racine du dépôt.
+
+**Déploiement déclenché manuellement** (pas automatique sur push) — voir
+"Pourquoi manuel" ci-dessous.
+
+## ⚠️ Incident du 2026-09-19 — à lire avant de déployer
+
+Le premier essai de déploiement a fait planter tout le VPS (CFA Impact
+inclus) : `docker-compose.yml` publiait une plage de 10 001 ports UDP
+(`50000-60000`) pour les flux média LiveKit. Sans `network_mode: host`,
+Docker crée un processus `docker-proxy` **par port publié** — 10 001
+processus ont saturé la mémoire du VPS (0 swap configuré), rendant même le
+SSH injoignable, et ont fait planter accidentellement le conteneur Traefik
+partagé (utilisé par CFA Impact et n8n).
+
+**Corrigé** : la plage est réduite à 100 ports (`50000-50099`, largement
+suffisant pour un usage à petite échelle) dans `docker-compose.yml` et
+`livekit.yaml.example`. Ne l'agrandissez **jamais** sans d'abord activer
+`{"userland-proxy": false}` dans `/etc/docker/daemon.json` (nécessite un
+restart du daemon Docker — impact bref sur tous les conteneurs du VPS, à
+faire consciemment, jamais en même temps qu'un premier déploiement).
+
+**Pourquoi manuel** : suite à cet incident, le déploiement automatique sur
+push a été retiré de `.github/workflows/deploy.yml` — un `git push` met
+seulement à jour GitHub, il ne touche plus le VPS. Le déploiement se
+déclenche explicitement, quand vous êtes prêt à surveiller ce qui se passe.
 
 ## État actuel
 
-- ✅ Secrets GitHub Actions configurés (`gh secret list --repo r1myy/Zoomie`) :
-  clés Supabase, clés LiveKit de production générées, clé API Resend,
-  `CRON_SECRET`, `VPS_HOST`, `VPS_SSH_KEY` (réutilise la clé de déploiement
-  déjà autorisée sur le VPS pour CFA Impact).
-- ✅ `/var/www/zoomie/livekit.yaml` créé sur le VPS avec une vraie paire
-  clé/secret LiveKit (pas `devkey`/`secret`).
-- ✅ Cron des rappels installé (`/etc/cron.d/zoomie-reminders`, toutes les
-  15 min, appelle `/api/reminders/run` en local sur le conteneur).
+- ✅ Secrets GitHub Actions configurés (`gh secret list --repo r1myy/Zoomie`).
+- ✅ `/var/www/zoomie/livekit.yaml` existe sur le VPS avec une vraie paire
+  clé/secret LiveKit — **mais avec l'ancienne plage de ports (60000) : à
+  corriger manuellement avant tout déploiement** (remplacer
+  `port_range_end: 60000` par `port_range_end: 50099`, voir
+  `livekit.yaml.example` pour le contenu à jour).
+- ✅ Cron des rappels installé (`/etc/cron.d/zoomie-reminders`).
+- ✅ Traefik et tous les autres services du VPS (CFA Impact, n8n, cobalt)
+  vérifiés sains après l'incident.
 - ⬜ **DNS à configurer** (bloquant — voir ci-dessous).
 - ⬜ **Domaine d'envoi Resend à vérifier** (sinon les invités réels ne
-  reçoivent pas les courriels — voir plus bas).
-- ⬜ Premier déploiement (se déclenche automatiquement au prochain
-  `git push` sur `main`, ou manuellement via `gh workflow run deploy.yml`).
+  reçoivent pas les courriels).
+- ⬜ Premier déploiement (à déclencher manuellement, voir plus bas).
 
-## 1. DNS — à faire avant tout
+## 1. DNS
 
 Ajoutez deux enregistrements A dans le DNS de `pixora.ca`, tous deux
 pointant vers `72.60.165.79` :
 
 | Nom                        | Type | Valeur          |
 | --------------------------- | ---- | --------------- |
-| `meet.pixora.ca`            | A    | `72.60.165.79`  |
-| `livekit-meet.pixora.ca`    | A    | `72.60.165.79`  |
+| `zoomie.pixora.ca`          | A    | `72.60.165.79`  |
+| `livekit.zoomie.pixora.ca`  | A    | `72.60.165.79`  |
 
 Traefik obtient automatiquement un certificat Let's Encrypt pour chaque
 domaine à la première requête HTTPS reçue — mais seulement une fois que le
 DNS résout correctement. Comptez quelques minutes à quelques heures selon
 votre registraire.
 
-## 2. Domaine d'envoi Resend (avant que de vrais invités reçoivent des courriels)
+## 2. Domaine d'envoi Resend
 
 Actuellement configuré avec l'adresse de test `onboarding@resend.dev`, qui
 **ne peut livrer qu'à l'adresse courriel de votre propre compte Resend** —
@@ -51,50 +74,56 @@ pas aux vrais invités d'une réunion planifiée.
    ```bash
    gh secret set RESEND_FROM_ADDRESS --repo r1myy/Zoomie --body "Zoomie <reunions@mail.pixora.ca>"
    ```
-   Puis redéployez (`gh workflow run deploy.yml --repo r1myy/Zoomie`).
 
-## 3. Premier déploiement
+## 3. Avant de déclencher le déploiement
 
-Une fois le DNS propagé, déclenchez le déploiement :
+Corrigez `/var/www/zoomie/livekit.yaml` sur le VPS (ancienne plage de ports
+encore en place depuis avant l'incident) :
+
+```bash
+ssh root@72.60.165.79
+nano /var/www/zoomie/livekit.yaml   # port_range_end: 60000 → 50099
+```
+
+## 4. Déclencher le déploiement
+
+Une fois le DNS propagé et `livekit.yaml` corrigé :
 
 ```bash
 gh workflow run deploy.yml --repo r1myy/Zoomie
-```
-
-(Ou attendez simplement le prochain `git push` sur `main` — le workflow se
-déclenche automatiquement.) Suivez sa progression :
-
-```bash
 gh run watch --repo r1myy/Zoomie
 ```
 
-## 4. Vérification
+Surveillez activement ce premier run (ne pas lancer puis partir) — si
+`docker compose up -d --build` semble bloqué plus de 1-2 minutes sur
+"Starting", interrompez et vérifiez `free -h` sur le VPS avant de
+laisser continuer.
 
-- `https://meet.pixora.ca` charge la page d'accueil Zoomie avec un
+## 5. Vérification
+
+- `https://zoomie.pixora.ca` charge la page d'accueil Zoomie avec un
   certificat valide.
-- `https://livekit-meet.pixora.ca` répond (même une erreur HTTP de LiveKit
-  suffit à confirmer que Traefik relaie correctement).
-- Créer un compte, se connecter, planifier une réunion avec un invité réel
-  → courriel d'invitation bien reçu (une fois le domaine Resend vérifié).
+- `https://livekit.zoomie.pixora.ca` répond (même une erreur HTTP de
+  LiveKit suffit à confirmer que Traefik relaie correctement).
+- `ssh root@72.60.165.79 "free -h"` — mémoire toujours saine après le
+  déploiement (pas de répétition de l'incident).
+- Créer un compte, planifier une réunion avec un invité réel → courriel
+  bien reçu (une fois le domaine Resend vérifié).
 - Rejoindre une réunion à deux depuis deux réseaux différents (ex. wifi +
   partage de connexion 4G) → audio/vidéo fonctionnels (confirme que le TURN
-  LiveKit fonctionne réellement, pas seulement la connexion directe).
-- `docker compose logs -f zoomie-livekit` sur le VPS ne montre pas
-  d'erreurs de connexion au démarrage.
+  LiveKit fonctionne réellement).
 
 ## Notes
 
-- **Pare-feu Hostinger** : `ufw` est inactif sur ce VPS (rien à ouvrir côté
-  Linux), mais si le panneau Hostinger a son propre pare-feu cloud, assurez-
-  vous que les ports suivants sont ouverts : `80`, `443` (déjà utilisés par
-  Traefik pour les autres sites), `7881/tcp`, `3478/udp`,
-  `50000-60000/udp` (LiveKit, nouveaux).
-- **Réutilisation du VPS** : `docker-compose.yml` ne touche que les
-  conteneurs `zoomie` et `zoomie-livekit`, sur le réseau `root_default`
-  existant — rien de la configuration CFA Impact/n8n/Traefik n'est modifié.
-- **Ressources** : VPS à 3.8 Go de RAM, ~2.5 Go disponibles avant ce
-  déploiement — LiveKit et le conteneur Next.js standalone sont légers,
-  marge confortable pour l'usage actuel.
+- **Isolation de CFA Impact** : `docker-compose.yml` ne touche que les
+  conteneurs `zoomie` et `zoomie-livekit`. L'incident du 2026-09-19 n'a pas
+  été causé par un conflit direct avec CFA Impact, mais par un épuisement
+  mémoire général du VPS qui a fait planter Traefik (partagé par tous les
+  sites) — d'où l'importance de la plage de ports réduite.
+- **Pare-feu Hostinger** : `ufw` est inactif sur ce VPS. Si le panneau
+  Hostinger a son propre pare-feu cloud, vérifiez que ces ports sont
+  ouverts : `80`, `443` (déjà utilisés), `7881/tcp`, `3478/udp`,
+  `50000-50099/udp` (LiveKit, nouveaux, plage réduite).
 - **Mise à jour manuelle si besoin** (dépannage) :
   ```bash
   ssh root@72.60.165.79

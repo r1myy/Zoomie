@@ -6,10 +6,15 @@ port: 7880
 rtc:
   tcp_port: 7881
   port_range_start: 50000
-  port_range_end: 60000
+  port_range_end: 50099
   # Indispensable en VPS cloud : LiveKit doit annoncer l'IP publique de la
   # machine dans les candidats ICE, pas son IP privée interne.
   use_external_ip: true
+  # ATTENTION : sans network_mode: host, chaque port de cette plage publié
+  # par Docker (docker-compose.yml) coûte un processus docker-proxy. Une
+  # plage de 10 000 ports a déjà saturé la mémoire du VPS de production —
+  # gardez cette plage petite tant que userland-proxy n'est pas désactivé
+  # dans le daemon Docker (voir docker-compose.yml).
 
 # Serveur TURN intégré (pas de conteneur coturn séparé) — indispensable pour
 # les participants derrière un NAT/pare-feu strict qui bloque les flux UDP

@@ -1,9 +1,10 @@
 name: Deploy
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+# Ne se déclenche plus automatiquement sur push — déploiement déclenché
+# manuellement (bouton "Run workflow" sur GitHub, ou `gh workflow run
+# deploy.yml`) pour garder le contrôle explicite sur ce qui part sur le VPS.
 
 jobs:
   deploy:

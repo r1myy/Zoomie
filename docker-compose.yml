@@ -3,8 +3,18 @@
 # `zoomie` (Next.js) est routé par Traefik comme n'importe quel autre
 # service du VPS. `zoomie-livekit` l'est aussi pour sa signalisation HTTP/WS
 # (port 7880, interne au réseau Docker) ; ses ports média WebRTC (TCP 7881,
-# UDP 3478 pour le TURN, UDP 50000-60000) sont en revanche publiés
+# UDP 3478 pour le TURN, UDP 50000-50099) sont en revanche publiés
 # directement sur l'hôte car Traefik ne relaie pas l'UDP.
+#
+# ATTENTION à la taille de la plage UDP média (port_range_start/end ci-dessous
+# et dans livekit.yaml) : sans network_mode: host, Docker crée un processus
+# docker-proxy PAR PORT publié. Une plage de 10 000 ports (50000-60000, la
+# valeur "par défaut" habituelle de LiveKit) a déjà saturé la mémoire de ce
+# VPS et causé une panne generale (voir incident du 2026-09-19). 100 ports
+# suffisent largement pour un usage à petite échelle — n'agrandissez cette
+# plage qu'après avoir activé `userland-proxy: false` dans le daemon Docker
+# (/etc/docker/daemon.json, nécessite un restart du daemon — impact sur tous
+# les conteneurs du VPS, à planifier).
 services:
   zoomie:
     build:
@@ -32,7 +42,7 @@ services:
       - root_default
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.zoomie.rule=Host(`meet.pixora.ca`)"
+      - "traefik.http.routers.zoomie.rule=Host(`zoomie.pixora.ca`)"
       - "traefik.http.routers.zoomie.entrypoints=websecure"
       - "traefik.http.routers.zoomie.tls.certresolver=mytlschallenge"
       - "traefik.http.services.zoomie.loadbalancer.server.port=3000"
@@ -47,12 +57,12 @@ services:
     ports:
       - "7881:7881/tcp"
       - "3478:3478/udp"
-      - "50000-60000:50000-60000/udp"
+      - "50000-50099:50000-50099/udp"
     networks:
       - root_default
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.zoomie-livekit.rule=Host(`livekit-meet.pixora.ca`)"
+      - "traefik.http.routers.zoomie-livekit.rule=Host(`livekit.zoomie.pixora.ca`)"
       - "traefik.http.routers.zoomie-livekit.entrypoints=websecure"
       - "traefik.http.routers.zoomie-livekit.tls.certresolver=mytlschallenge"
       - "traefik.http.services.zoomie-livekit.loadbalancer.server.port=7880"
